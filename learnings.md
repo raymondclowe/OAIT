@@ -14,7 +14,7 @@
 
 ### Implementation Progress
 
-#### Phase 1-2: WebSocket Integration (IN PROGRESS)
+#### Phase 1-2: WebSocket Integration (COMPLETE ✅)
 **Completed:**
 - Created FastAPI WebSocket server (`websocket_server.py`)
   - Handles real-time audio and video streaming
@@ -41,19 +41,45 @@
 - TTS: Web Speech API (browser-native, no cloud dependency)
 - Serving static HTML directly from FastAPI
 
+#### Phase 5: AI Tool System (COMPLETE ✅)
+**Completed:**
+- Implemented `PedagogicalTools` class with 6 core tools:
+  1. `verify_calculation`: Verify mathematical calculations
+  2. `assess_confusion_level`: Analyze speech for confusion indicators
+  3. `detect_question`: Detect if student asked a question
+  4. `detect_stuck_pattern`: Detect if student is stuck
+  5. `suggest_intervention_strategy`: Recommend best intervention approach
+- Created `get_tool_definitions()` for OpenAI function calling format
+- Comprehensive test suite (27 tests, 100% passing)
+- Tools use heuristics and pattern matching for real-time analysis
+
+**Technical Decisions:**
+- Simple pattern matching for MVP (no ML models needed)
+- Tools return structured dictionaries with confidence scores
+- Confusion detection based on keywords and hesitations
+- Stuck detection combines silence, whiteboard activity, and speech patterns
+- Strategy suggestions based on combination of student state indicators
+
+**Tool Capabilities:**
+- Verify calculations with ~0.0001 tolerance for floating point
+- Detect 13+ confusion indicators (e.g., "I don't understand", "um", "?")
+- Detect 11+ question patterns (e.g., "how do I", "what is", "?")
+- Detect stuck with 5 explicit indicators + behavioral patterns
+- Suggest 6 intervention strategies (socratic, direct, scaffolding, hint, example, analogical)
+
 **Next Steps:**
+- Integrate tools with OODA loop decision-making
 - Test the WebSocket server with real audio/video
-- Implement AI tool system (Phase 5)
 - Complete OODA loop intervention logic (Phase 6)
 - Add Excalidraw integration for better whiteboard
 - PWA manifest for mobile support
 
 ### Next Steps
 According to IMPLEMENTATION_PLAN.md and STATUS.md, we need to work on:
-1. **Phase 1**: Audio WebSocket Integration (connect browser → server → Whisper STT) ✅ DONE
-2. **Phase 2**: Vision WebSocket Integration (connect browser → server → Gemini 3 Pro) ✅ DONE
-3. **Phase 5**: AI Tool System (pedagogical tools for the OODA loop)
-4. **Phase 6**: Intervention System (decision-making and TTS) ✅ PARTIAL (TTS done, decision logic needs work)
+1. **Phase 1**: Audio WebSocket Integration ✅ DONE
+2. **Phase 2**: Vision WebSocket Integration ✅ DONE
+3. **Phase 5**: AI Tool System ✅ DONE
+4. **Phase 6**: Intervention System (decision-making and TTS) - PARTIAL (TTS done, decision logic needs integration)
 5. **Phase 7**: Full MVP Integration (Gradio/Flask UI, PWA, Excalidraw)
 
 ### Key Constraints
@@ -62,8 +88,10 @@ According to IMPLEMENTATION_PLAN.md and STATUS.md, we need to work on:
 - Save learnings to this file as development progresses
 
 ### Technical Notes
-- All tests passing (10/10)
+- All tests passing (37/37)
 - WebSocket server ready for testing
+- Pedagogical tools ready for OODA loop integration
 - Need to configure OpenRouter API key in .env file to test
 - Whisper STT needs audio in WAV format
 - Canvas sends frames as base64-encoded PNG images every 3 seconds
+- Tools use simple heuristics - can be enhanced with ML later if needed
