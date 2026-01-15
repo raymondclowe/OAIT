@@ -78,45 +78,56 @@ class SessionState:
 ### 3.1 Component Diagram
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   LiveKit Room                      │
-│  (Student's audio/video stream)                     │
-└──────────────┬──────────────┬───────────────────────┘
-               │              │
-       ┌───────▼──────┐  ┌───▼──────────┐
-       │ Audio Stream │  │ Video Stream │
-       │  (The Ears)  │  │  (The Eyes)  │
-       └───────┬──────┘  └───┬──────────┘
-               │              │
-       ┌───────▼──────────────▼──────────┐
-       │    Event Aggregator              │
-       │  (Trigger Detection)             │
-       └───────┬──────────────────────────┘
-               │
-       ┌───────▼──────────────────────────┐
-       │    Cognitive Loop                │
-       │  (OODA Implementation)           │
-       │                                  │
-       │  ┌─────────────────────┐        │
-       │  │  Observe            │        │
-       │  │  ↓                  │        │
-       │  │  Orient (Internal   │        │
-       │  │         Monologue)  │        │
-       │  │  ↓                  │        │
-       │  │  Decide             │        │
-       │  │  ↓                  │        │
-       │  │  Act                │        │
-       │  └─────────────────────┘        │
-       └───────┬──────────────────────────┘
-               │
-       ┌───────▼──────────────────────────┐
-       │    Action Router                 │
-       └───┬──────────┬──────────┬────────┘
-           │          │          │
-      ┌────▼───┐ ┌───▼────┐ ┌──▼────────┐
-      │ Speak  │ │ Update │ │ Continue  │
-      │ (TTS)  │ │   DB   │ │ Observing │
-      └────────┘ └────────┘ └───────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                    STUDENT DEVICE (Browser)                          │
+│  (Android Phone / Mac Mini / Windows Laptop)                        │
+│                                                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
+│  │ getUserMedia │  │  Whiteboard  │  │ Web Speech API (TTS)     │  │
+│  │   (Audio)    │  │  (Canvas)    │  │ (Browser-native, free)   │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────────────────┘  │
+└─────────┼─────────────────┼─────────────────────────────────────────┘
+          │                 │
+          │    WebSocket    │
+          ▼                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│              HOUSEHOLD SERVER (Ubuntu/Windows + Python)              │
+│                                                                      │
+│  ┌─────────────────────────┐  ┌─────────────────────────────────┐  │
+│  │   Gradio/Flask Web UI   │  │   Local Whisper STT             │  │
+│  │   (Port 7860)           │  │   (faster-whisper, no API key)  │  │
+│  └───────────┬─────────────┘  └────────────────┬────────────────┘  │
+│              │                                  │                    │
+│       ┌──────▼──────────────────────────────────▼──────┐            │
+│       │            Event Aggregator                     │            │
+│       │          (Trigger Detection)                    │            │
+│       └──────────────────┬──────────────────────────────┘            │
+│                          │                                           │
+│       ┌──────────────────▼──────────────────────────────┐            │
+│       │              Cognitive Loop                      │            │
+│       │            (OODA Implementation)                 │            │
+│       │  ┌────────────────────────────────────────────┐ │            │
+│       │  │ Observe → Orient → Decide → Act            │ │            │
+│       │  └────────────────────────────────────────────┘ │            │
+│       └──────────────────┬──────────────────────────────┘            │
+│                          │                                           │
+│       ┌──────────────────▼──────────────────────────────┐            │
+│       │              OpenRouter Client                   │            │
+│       │  (All LLM calls routed here - geo-free)         │            │
+│       └──────────────────┬──────────────────────────────┘            │
+└──────────────────────────┼──────────────────────────────────────────┘
+                           │ HTTPS
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         OpenRouter.ai                                │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │  Gemini 3 Pro (Preferred)                                    │    │
+│  │  ✓ Image input/output   ✓ Tool calling   ✓ High reasoning   │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                      │
+│  ⚠️ Note: OpenAI/Anthropic are geo-blocked - must use OpenRouter    │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 Asynchronous Event Loop
@@ -401,29 +412,85 @@ def calculate_optimal_delay(student_model, context):
 - Intervention appropriateness ratings
 - Learning outcome measurements
 
-## 10. Extensibility
+## 10. Deployment Architecture
 
-### 10.1 Subject Domains
+### 10.1 Household Server Setup
+
+The system runs on a household server (Ubuntu or Windows) accessible via LAN:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    HOUSEHOLD LAN                            │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────────────────────────┐  │
+│  │ Android Phone │    │     Household Server             │  │
+│  │ Mac Mini      │───▶│  (Ubuntu/Windows + Python)       │  │
+│  │ Windows Laptop│    │                                  │  │
+│  └──────────────┘    │  ┌─────────────┐ ┌────────────┐  │  │
+│      (Clients)       │  │ Gradio/Flask│ │  Whisper   │  │  │
+│                      │  │  Frontend   │ │ (Local STT)│  │  │
+│                      │  └─────────────┘ └────────────┘  │  │
+│                      └──────────────┬───────────────────┘  │
+└─────────────────────────────────────│───────────────────────┘
+                                      │
+                           ┌──────────▼──────────┐
+                           │   OpenRouter.ai     │
+                           │  (Geo-free routing) │
+                           │                     │
+                           │  ┌───────────────┐  │
+                           │  │ Gemini 3 Pro  │  │
+                           │  │ (Preferred)   │  │
+                           │  └───────────────┘  │
+                           └─────────────────────┘
+```
+
+### 10.2 API Constraints
+
+> ⚠️ **CRITICAL**: OpenAI and Anthropic APIs are geo-blocked. All LLM calls MUST route through OpenRouter.ai.
+
+**OpenRouter Tool Support**: Not all models support function calling. Verify model capabilities before use.
+
+**Preferred Model**: Gemini 3 Pro (via OpenRouter)
+- ✅ High-quality reasoning and understanding
+- ✅ Image input support
+- ✅ Image output support  
+- ✅ Tool/function calling support
+
+### 10.3 Cost Optimization (MVP)
+
+| Service | MVP (Local/Free) | Post-MVP (Paid) |
+|---------|------------------|------------------|
+| STT | Whisper (local server) | Deepgram |
+| TTS | Web Speech API (browser) | ElevenLabs |
+| LLM | Gemini 3 Pro (OpenRouter) | Same |
+| Vision | Gemini 3 Pro (OpenRouter) | Same |
+
+## 11. Extensibility
+
+### 11.1 Subject Domains
 
 Initial focus: Mathematics  
 Future: Physics, Chemistry, Programming, Writing
 
-### 10.2 Interface Modalities
+### 11.2 Interface Modalities
 
 Current: Digital whiteboard + voice  
 Future: Physical whiteboard via camera, gesture recognition, multiple students
 
-### 10.3 AI Models
+### 11.3 AI Models
 
-Designed to be model-agnostic with adapter pattern:
-- Vision: GPT-4o, Claude 3 Opus, Moondream
-- STT: Deepgram, Whisper, Faster-Whisper
-- TTS: ElevenLabs, Cartesia, local alternatives
+Designed to be model-agnostic with adapter pattern (all via OpenRouter):
+- Vision/Reasoning: Gemini 3 Pro (preferred), Claude 3 Opus, GPT-4o
+- STT: Faster-Whisper (local), Deepgram (future)
+- TTS: Web Speech API (MVP), ElevenLabs (future)
 
-## 11. Open Questions
+## 12. Open Questions
 
 1. How to handle multiple students in one session?
 2. Optimal buffer sizes for different age groups?
 3. Should the AI ever show its "internal monologue" to students?
 4. How to balance intervention frequency across student diversity?
 5. What metrics best indicate successful tutoring?
+6. Which OpenRouter models support tool calling reliably?
+7. Fallback strategy when OpenRouter is unavailable?
+8. How to handle Whisper latency on lower-powered servers?

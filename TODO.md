@@ -18,7 +18,8 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 - [x] Create IMPLEMENTATION_PLAN.md
 - [x] Create TODO.md (this file)
 - [ ] Create directory structure
-  - [ ] `/src/oait/agents`
+  - [ ] `/src/oait/server`
+  - [ ] `/src/oait/api`
   - [ ] `/src/oait/audio`
   - [ ] `/src/oait/vision`
   - [ ] `/src/oait/cognitive`
@@ -34,24 +35,26 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 
 ### Configuration
 - [ ] Create `requirements.txt` with dependencies
-  - [ ] livekit
-  - [ ] livekit-agents
-  - [ ] openai
-  - [ ] deepgram-sdk
-  - [ ] elevenlabs
+  - [ ] openai (OpenRouter uses OpenAI-compatible API)
+  - [ ] faster-whisper (local STT)
+  - [ ] gradio (web frontend)
+  - [ ] flask (alternative frontend)
   - [ ] pillow
   - [ ] pydantic
   - [ ] python-dotenv
   - [ ] pytest
   - [ ] pytest-asyncio
   - [ ] pytest-mock
+  - [ ] httpx (async HTTP client)
 - [ ] Create `.env.example` template
-  - [ ] LIVEKIT_URL
-  - [ ] LIVEKIT_API_KEY
-  - [ ] LIVEKIT_API_SECRET
-  - [ ] OPENAI_API_KEY
-  - [ ] DEEPGRAM_API_KEY
-  - [ ] ELEVENLABS_API_KEY
+  - [ ] OPENROUTER_API_KEY (REQUIRED)
+  - [ ] OPENROUTER_MODEL (default: google/gemini-3.0-pro)
+  - [ ] WHISPER_MODEL_SIZE (default: base)
+  - [ ] SERVER_HOST (default: 0.0.0.0)
+  - [ ] SERVER_PORT (default: 7860)
+  - [ ] LIVEKIT_URL (optional, future)
+  - [ ] LIVEKIT_API_KEY (optional, future)
+  - [ ] LIVEKIT_API_SECRET (optional, future)
 - [ ] Create `.gitignore`
   - [ ] .env
   - [ ] __pycache__
@@ -83,21 +86,22 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 
 ### Audio Stream Handler
 - [ ] Implement `AudioStreamHandler` class
-  - [ ] `__init__` with LiveKit room connection
+  - [ ] `__init__` with browser WebSocket connection
   - [ ] `capture_audio()` async method
   - [ ] `start()` method to begin capture
   - [ ] `stop()` method to end capture
   - [ ] Error handling for connection issues
 - [ ] Add logging for audio events
 
-### Speech-to-Text Integration
+### Speech-to-Text Integration (Local Whisper)
 - [ ] Create STT service abstraction
   - [ ] Abstract base class `STTService`
-  - [ ] Deepgram implementation
-  - [ ] Whisper implementation (future)
+  - [ ] **Whisper implementation (MVP - local, free)**
+  - [ ] Deepgram implementation (future, paid)
 - [ ] Implement transcription pipeline
   - [ ] Audio chunk processing
-  - [ ] Real-time streaming
+  - [ ] Batch transcription (Whisper doesn't stream)
+  - [ ] Configure model size (base/small/medium/large)
   - [ ] Error recovery
 - [ ] Add transcription quality metrics
 

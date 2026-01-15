@@ -24,9 +24,10 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
   /docs              # Additional documentation
   /src
     /oait
-      /agents        # LiveKit agent implementation
-      /audio         # Audio processing
-      /vision        # Vision processing
+      /server        # Gradio/Flask web server
+      /api           # OpenRouter API integration
+      /audio         # Audio processing (Whisper STT)
+      /vision        # Vision processing (Gemini 3 Pro)
       /cognitive     # OODA loop and decision making
       /models        # Data models and state
       /tools         # AI tool functions
@@ -36,7 +37,7 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
     /integration
     /e2e
   /config            # Configuration files
-  /memory            # Student model storage
+  /memory            # Student model storage (local)
   README.md
   SPECIFICATION.md
   IMPLEMENTATION_PLAN.md
@@ -44,6 +45,14 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
   requirements.txt
   .env.example
 ```
+
+### Architecture Constraints
+
+> ⚠️ **CRITICAL CONSTRAINTS**:
+> - OpenAI/Anthropic APIs are geo-blocked - use **OpenRouter.ai** for all LLM calls
+> - Prefer **Gemini 3 Pro** via OpenRouter (supports images + tools)
+> - MVP uses local/free services where possible (Whisper STT, Web Speech TTS)
+> - Server runs on household LAN (Ubuntu/Windows), clients access via browser
 
 ### Testing
 - [ ] Verify all directories created
@@ -59,11 +68,11 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
 
 ## Phase 1: Basic Audio Pipeline (Week 2)
 
-**Goal**: Implement audio capture, transcription, and buffer management
+**Goal**: Implement audio capture, transcription, and buffer management using local Whisper
 
 ### Deliverables
-- [ ] Audio stream ingestion from LiveKit
-- [ ] Speech-to-text integration (Deepgram or Whisper)
+- [ ] Audio stream ingestion from browser (Web Audio API)
+- [ ] Local Whisper STT integration (faster-whisper)
 - [ ] Transcript buffer with sliding window
 - [ ] Basic silence detection
 - [ ] Audio pipeline unit tests
@@ -71,6 +80,12 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
 ### Core Components
 
 ```python
+# src/oait/audio/whisper_stt.py
+class WhisperSTT:
+    """Local Whisper-based speech-to-text"""
+    def __init__(self, model_size: str = "base")  # base, small, medium, large
+    async def transcribe(audio: AudioChunk) -> str
+    
 # src/oait/audio/stream_handler.py
 class AudioStreamHandler:
     async def capture_audio() -> AudioChunk
@@ -83,14 +98,19 @@ class TranscriptBuffer:
     def clear()
 ```
 
+### MVP Notes
+- Using **local Whisper** (faster-whisper) to avoid paid STT services
+- Web Speech API for browser-based TTS (free, no API key needed)
+- Can upgrade to Deepgram post-MVP for lower latency
+
 ### Testing
 - [ ] Unit test: Buffer maintains correct window size
 - [ ] Unit test: Silence detection accuracy
 - [ ] Integration test: End-to-end audio capture to transcript
-- [ ] Manual test: Real microphone input transcription
+- [ ] Manual test: Real microphone input transcription via browser
 
 ### Success Criteria
-- Audio consistently transcribed with < 500ms latency
+- Audio consistently transcribed with < 1s latency (local Whisper)
 - Buffer correctly maintains 30-second sliding window
 - Silence detection triggers within 1 second accuracy
 
@@ -98,18 +118,29 @@ class TranscriptBuffer:
 
 ## Phase 2: Basic Vision Pipeline (Week 3)
 
-**Goal**: Implement video capture and basic image analysis
+**Goal**: Implement video capture and basic image analysis via OpenRouter
 
 ### Deliverables
-- [ ] Video stream ingestion from LiveKit
+- [ ] Video stream ingestion from browser (getUserMedia API)
 - [ ] Frame capture at configurable intervals
 - [ ] Basic image preprocessing (crop, denoise)
-- [ ] Vision LLM integration (GPT-4o or Moondream)
+- [ ] Vision LLM integration via **OpenRouter** (Gemini 3 Pro preferred)
 - [ ] Vision pipeline unit tests
 
 ### Core Components
 
 ```python
+# src/oait/api/openrouter.py
+class OpenRouterClient:
+    """Unified client for OpenRouter API calls"""
+    def __init__(self, api_key: str)
+    async def chat(model: str, messages: List[Dict], tools: List[Dict] = None) -> Dict
+    async def vision(model: str, image: Image, prompt: str) -> str
+    
+    # Preferred models (verify tool support before use)
+    VISION_MODEL = "google/gemini-3.0-pro"
+    REASONING_MODEL = "google/gemini-3.0-pro"
+
 # src/oait/vision/stream_handler.py
 class VideoStreamHandler:
     async def capture_frame() -> Image
@@ -117,19 +148,27 @@ class VideoStreamHandler:
     
 # src/oait/vision/analyzer.py
 class VisionAnalyzer:
+    def __init__(self, openrouter: OpenRouterClient)
     async def analyze_whiteboard(image: Image) -> Dict
     async def detect_changes(prev: Image, curr: Image) -> bool
 ```
 
+### OpenRouter Integration Notes
+> ⚠️ **Geo-blocking**: Cannot use OpenAI/Anthropic directly. All calls via OpenRouter.
+> 
+> **Tool calling**: Not all OpenRouter models support tools. Test before implementing.
+> 
+> **Preferred model**: Gemini 3 Pro supports image input, image output, and tools.
+
 ### Testing
 - [ ] Unit test: Frame capture at specified intervals
 - [ ] Unit test: Image preprocessing consistency
-- [ ] Integration test: Vision LLM returns valid analysis
+- [ ] Integration test: OpenRouter vision API returns valid analysis
 - [ ] Manual test: Analyze actual whiteboard images
 
 ### Success Criteria
 - Frames captured reliably every 2-5 seconds
-- Vision LLM correctly describes whiteboard content
+- Gemini 3 Pro (via OpenRouter) correctly describes whiteboard content
 - Change detection identifies significant updates
 
 ---
@@ -440,10 +479,24 @@ Each phase follows this testing pyramid:
 ## Dependencies and Prerequisites
 
 ### Required Accounts/Keys
-- LiveKit account (cloud or self-hosted)
-- OpenAI API key (or local Ollama setup)
-- Deepgram API key (or local Whisper setup)
-- ElevenLabs API key (or local TTS setup)
+- **OpenRouter.ai API key** (REQUIRED - geo-free LLM routing)
+- LiveKit account (optional, for future streaming features)
+
+### MVP Stack (No Additional Paid Services)
+- **Whisper** (local): STT on household server
+- **Web Speech API**: Browser TTS (free)
+- **Gemini 3 Pro** via OpenRouter: Vision + reasoning
+
+### Post-MVP Upgrades (Optional Paid Services)
+- Deepgram API key (low-latency cloud STT)
+- ElevenLabs API key (premium TTS)
+
+### Hardware Requirements
+- **Household Server**: Ubuntu or Windows machine on LAN
+  - Python 3.9+
+  - Sufficient RAM for Whisper model (4GB+ recommended)
+  - GPU optional but helpful for faster Whisper inference
+- **Client Devices**: Android phone, Mac Mini, or Windows laptop with browser
 
 ### Development Tools
 - Python 3.9+
@@ -451,10 +504,23 @@ Each phase follows this testing pyramid:
 - Docker (optional, for containerization)
 - VS Code or similar IDE
 
+### Python Dependencies
+```
+openai  # OpenRouter uses OpenAI-compatible API
+faster-whisper  # Local STT
+gradio  # Web frontend
+flask  # Alternative web frontend
+pillow  # Image processing
+pydantic  # Data models
+python-dotenv  # Configuration
+pytest  # Testing
+pytest-asyncio  # Async testing
+```
+
 ### Knowledge Requirements
 - Async Python programming
 - Real-time audio/video processing
-- LLM integration
+- LLM integration (OpenRouter API)
 - Basic pedagogy principles
 
 ---

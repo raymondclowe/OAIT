@@ -31,16 +31,28 @@ OAIT operates on an event-driven architecture with three parallel streams:
 
 ## Technology Stack
 
-### Recommended (Cloud-based)
-- **LiveKit Agents**: Real-time multimodal agent framework
-- **Pipecat AI**: Pipeline framework for audio/video processing
-- **GPT-4o**: Multimodal LLM for vision and language understanding
-- **Deepgram**: Ultra-low latency speech-to-text
-- **ElevenLabs/Cartesia**: Natural text-to-speech
+### Architecture Overview
+**Household Server** (Ubuntu or Windows) running Python with Gradio or Flask frontend, accessible from LAN devices (Android phone, Mac Mini, Windows laptop).
 
-### Open Source Alternatives (Local)
-- **Ollama + Moondream**: Local vision model
-- **Faster-Whisper**: On-device transcription
+### API Routing (Required)
+- **OpenRouter.ai**: All cloud LLM calls routed through OpenRouter (OpenAI/Anthropic are geo-blocked)
+- **Gemini 3 Pro** (via OpenRouter): Preferred model for high-quality reasoning, understanding, and image work (supports image input/output)
+
+> ⚠️ **Note**: OpenRouter supports tool calling with *some* models only - verify model capabilities before implementation.
+
+### MVP Stack (Local-First)
+- **Whisper** (local): Speech-to-text on household server
+- **Web Speech API**: Browser-based TTS for MVP (upgrade to paid services later)
+- **Gradio/Flask**: Web frontend served from household server
+- **SQLite/JSON**: Local student model storage
+
+### Future Enhancements (Post-MVP)
+- **ElevenLabs/Cartesia**: Premium TTS (via OpenRouter where available)
+- **Deepgram**: Low-latency cloud STT
+- **LiveKit**: Real-time streaming (if needed)
+
+### Open Source Components
+- **Faster-Whisper**: Optimized local transcription
 - **Excalidraw**: Web-based whiteboard component
 
 ## Project Status
@@ -56,8 +68,9 @@ See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap and [T
 ### Prerequisites
 
 - Python 3.9+
-- LiveKit account (or self-hosted server)
-- API keys for chosen services (OpenAI, Deepgram, etc.)
+- Household server (Ubuntu or Windows) on LAN
+- OpenRouter.ai API key (required - geo-free routing)
+- Client device: Android phone, Mac Mini, or Windows laptop
 
 ### Installation
 
@@ -66,12 +79,22 @@ See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap and [T
 git clone https://github.com/raymondclowe/OAIT.git
 cd OAIT
 
-# Install dependencies (to be defined)
+# Install dependencies
 pip install -r requirements.txt
+
+# Install Whisper for local STT
+pip install faster-whisper
 
 # Configure API keys
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your OpenRouter API key
+```
+
+### Running the Server
+
+```bash
+# Start the household server (accessible on LAN)
+python src/oait/server.py --host 0.0.0.0 --port 7860
 ```
 
 ### Usage
