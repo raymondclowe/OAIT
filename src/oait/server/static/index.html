@@ -266,6 +266,64 @@
     
     <script>
         // =====================================================
+        // POP-OUT FUNCTIONALITY
+        // Open components in separate windows
+        // =====================================================
+        
+        const poppedOutWindows = {};
+        
+        function popOut(component) {
+            if (!sessionId) {
+                alert('Please start a session first');
+                return;
+            }
+            
+            // Save session to localStorage for the new window
+            localStorage.setItem('oait_session', JSON.stringify({
+                sessionId: sessionId,
+                studentId: document.getElementById('studentId').value
+            }));
+            
+            const url = `/component/${component}?session=${sessionId}`;
+            
+            // Window sizes for different components
+            const sizes = {
+                whiteboard: 'width=800,height=600',
+                camera: 'width=400,height=350',
+                transcript: 'width=400,height=500',
+                ai: 'width=500,height=400',
+                debug: 'width=600,height=400',
+                controls: 'width=400,height=300',
+            };
+            
+            const win = window.open(url, `oait_${component}`, sizes[component] || 'width=600,height=400');
+            poppedOutWindows[component] = win;
+            
+            // Update button to show it's popped out
+            const btn = document.querySelector(`#${component}Panel .popout-btn, [onclick="popOut('${component}')"]`);
+            if (btn) {
+                btn.textContent = '✓ Popped';
+                btn.style.background = '#48bb78';
+                btn.style.color = 'white';
+                btn.style.borderColor = '#48bb78';
+            }
+            
+            // Check periodically if window was closed
+            const checkClosed = setInterval(() => {
+                if (win.closed) {
+                    clearInterval(checkClosed);
+                    delete poppedOutWindows[component];
+                    if (btn) {
+                        btn.textContent = '↗️ Pop Out';
+                        btn.style.background = '';
+                        btn.style.color = '';
+                        btn.style.borderColor = '';
+                    }
+                }
+            }, 1000);
+        }
+        
+        // =====================================================
         // PULL-BASED ARCHITECTURE
         // Client buffers data locally, server requests when needed
         // =====================================================
