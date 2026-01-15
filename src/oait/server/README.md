@@ -206,7 +206,6 @@ mypy src/
 
 - [ ] Add Excalidraw for advanced whiteboard features
 - [ ] Implement PWA manifest for mobile support
-- [ ] Add AI pedagogical tools (verify_calculation, etc.)
 - [ ] Enhanced OODA loop decision logic
 - [ ] Session history and replay
 - [ ] Multi-student support

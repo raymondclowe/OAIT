@@ -1,6 +1,8 @@
 """Pedagogical tools for AI reasoning about student state."""
 
 import re
+import ast
+import operator
 from typing import Dict, Any, List
 import logging
 
@@ -9,6 +11,50 @@ logger = logging.getLogger(__name__)
 
 class PedagogicalTools:
     """Collection of tools for AI to use when analyzing student work."""
+
+    # Safe mathematical operators for expression evaluation
+    _SAFE_OPERATORS = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.USub: operator.neg,
+        ast.UAdd: operator.pos,
+    }
+
+    @staticmethod
+    def _safe_eval(node: ast.AST) -> float:
+        """Safely evaluate a mathematical expression AST node.
+        
+        Args:
+            node: AST node to evaluate
+            
+        Returns:
+            Evaluated result as float
+            
+        Raises:
+            ValueError: If expression contains unsafe operations
+        """
+        if isinstance(node, ast.Constant):  # Python 3.8+
+            return float(node.value)
+        elif isinstance(node, ast.Num):  # Python 3.7 compatibility
+            return float(node.n)
+        elif isinstance(node, ast.BinOp):
+            left = PedagogicalTools._safe_eval(node.left)
+            right = PedagogicalTools._safe_eval(node.right)
+            op = PedagogicalTools._SAFE_OPERATORS.get(type(node.op))
+            if op is None:
+                raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+            return op(left, right)
+        elif isinstance(node, ast.UnaryOp):
+            operand = PedagogicalTools._safe_eval(node.operand)
+            op = PedagogicalTools._SAFE_OPERATORS.get(type(node.op))
+            if op is None:
+                raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+            return op(operand)
+        else:
+            raise ValueError(f"Unsupported expression type: {type(node).__name__}")
 
     @staticmethod
     def verify_calculation(expression: str, student_answer: str) -> Dict[str, Any]:
@@ -26,21 +72,40 @@ class PedagogicalTools:
             expression = expression.strip()
             student_answer = student_answer.strip()
             
-            # Evaluate expression safely
-            # Note: In production, use a safer math parser like sympy
-            allowed_chars = set("0123456789+-*/().^ ")
-            if not all(c in allowed_chars for c in expression):
+            # Replace ^ with ** for power operator
+            expression = expression.replace("^", "**")
+            
+            # Parse expression using AST (safe - no code execution)
+            try:
+                tree = ast.parse(expression, mode='eval')
+            except SyntaxError as e:
                 return {
                     "valid": False,
-                    "error": "Invalid characters in expression",
+                    "error": f"Invalid expression syntax: {str(e)}",
                     "correct": False
                 }
             
-            # Replace ^ with ** for Python eval
-            expression = expression.replace("^", "**")
-            
-            # Calculate correct answer
-            correct_answer = eval(expression)
+            # Evaluate using safe AST evaluation (no eval() - no arbitrary code execution)
+            try:
+                correct_answer = PedagogicalTools._safe_eval(tree.body)
+            except ValueError as e:
+                return {
+                    "valid": False,
+                    "error": str(e),
+                    "correct": False
+                }
+            except ZeroDivisionError:
+                return {
+                    "valid": False,
+                    "error": "Division by zero",
+                    "correct": False
+                }
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "error": f"Evaluation error: {str(e)}",
+                    "correct": False
+                }
             
             # Try to parse student answer
             try:

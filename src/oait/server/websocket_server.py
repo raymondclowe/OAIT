@@ -3,6 +3,7 @@
 import logging
 import asyncio
 import json
+import tempfile
 from typing import Dict, Set, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
@@ -219,13 +220,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
                 # Transcribe audio using Whisper
                 if whisper_stt and len(audio_data) > 0:
                     try:
-                        # Save audio chunk temporarily
-                        temp_audio_path = f"/tmp/audio_{session_id}.wav"
-                        with open(temp_audio_path, 'wb') as f:
-                            f.write(audio_data)
-                        
-                        # Transcribe
-                        text = await whisper_stt.transcribe(temp_audio_path)
+                        # Use secure temporary file to avoid race conditions and security vulnerabilities
+                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_audio_file:
+                            temp_audio_file.write(audio_data)
+                            temp_audio_file.flush()
+                            
+                            # Transcribe
+                            text = await whisper_stt.transcribe(temp_audio_file.name)
                         
                         if text:
                             # Add to transcript buffer
@@ -269,10 +270,19 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
                         if trigger_detector.should_trigger_analysis(session_state):
                             logger.info("Triggering OODA loop analysis...")
                             
+                            # Load student model from repository
+                            repository = server_components.get('repository')
+                            student_model = None
+                            if repository:
+                                try:
+                                    student_model = await repository.load(session_state.student_id)
+                                except Exception as e:
+                                    logger.error(f"Error loading student model: {e}")
+                            
                             # Run OODA loop
                             decision = await ooda_loop.run_cycle(
                                 session_state=session_state,
-                                student_model=None  # TODO: Load from repository
+                                student_model=student_model
                             )
                             
                             # If AI decides to speak, send response to client
