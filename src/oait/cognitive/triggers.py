@@ -69,3 +69,20 @@ class TriggerDetector:
             logger.info(f"Triggers activated: {', '.join(triggers)}")
 
         return should_trigger, triggers
+
+    def should_trigger_analysis(
+        self,
+        session_state: SessionState,
+        has_visual_change: bool = False,
+    ) -> bool:
+        """Convenience method to check if analysis should be triggered.
+        
+        Args:
+            session_state: Current session state
+            has_visual_change: Whether significant visual change detected
+            
+        Returns:
+            True if OODA loop should run
+        """
+        should_trigger, _ = self.check_triggers(session_state, has_visual_change)
+        return should_trigger

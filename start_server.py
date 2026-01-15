@@ -2,9 +2,27 @@
 """Start the OAIT WebSocket server."""
 
 import uvicorn
+import multiprocessing
+import logging
 from oait.config import get_settings
 
+# Configure logging for oait modules
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+# Set oait modules to INFO level
+logging.getLogger('oait').setLevel(logging.INFO)
+
+# Set multiprocessing start method to 'spawn' to avoid semaphore leaks
+# This must be done before any multiprocessing resources are created
 if __name__ == "__main__":
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        pass  # Already set
+    
     settings = get_settings()
     print(f"""
     ╔═══════════════════════════════════════════════════════════╗

@@ -22,8 +22,10 @@ from ..audio.stream_handler import TranscriptBuffer, SilenceDetector
 from ..vision.analyzer import VisionAnalyzer
 from ..vision.preprocessor import ImagePreprocessor
 from ..cognitive.loop import OODALoop
+from ..cognitive.tool_loop import ToolOODALoop
 from ..cognitive.triggers import TriggerDetector
 from ..models.data_models import SessionState, StudentModel
+from ..tools.ai_tools import ToolContext, AIToolHandlers
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -89,6 +91,34 @@ async def startup_event() -> None:
     await initialize_server()
 
 
+@app.on_event("shutdown")
+async def shutdown_event() -> None:
+    """Shutdown event handler - cleanup resources to prevent leaks."""
+    logger.info("Shutting down OAIT WebSocket server...")
+    
+    # Unload Whisper model to release semaphores
+    whisper_stt = server_components.get('whisper')
+    if whisper_stt:
+        whisper_stt.unload_model()
+        logger.info("Whisper model unloaded")
+    
+    # Close any active WebSocket connections
+    for session_id, ws in list(active_connections.items()):
+        try:
+            await ws.close()
+        except Exception:
+            pass
+    active_connections.clear()
+    
+    # Clear active sessions
+    active_sessions.clear()
+    
+    # Clear server components
+    server_components.clear()
+    
+    logger.info("OAIT WebSocket server shutdown complete")
+
+
 @app.get("/")
 async def root() -> FileResponse:
     """Serve the main HTML page."""
@@ -132,7 +162,7 @@ async def start_session(student_id: str) -> Dict[str, str]:
     )
     
     # Initialize session components
-    session_state.transcript_buffer = TranscriptBuffer(max_duration=30.0)
+    session_state.transcript_buffer = TranscriptBuffer(duration=30.0)
     session_state.silence_detector = SilenceDetector(threshold=3.0)
     
     active_sessions[session_id] = session_state
@@ -174,11 +204,12 @@ async def stop_session(session_id: str) -> Dict[str, str]:
 
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
-    """WebSocket endpoint for audio and video streaming.
+    """WebSocket endpoint for AI-driven tool-based communication.
     
-    Handles bidirectional communication:
-    - Receives audio chunks and video frames from client
-    - Sends transcripts and AI responses back to client
+    Architecture: AI controls everything via tools
+    - AI uses tools to request data (audio, whiteboard, camera)
+    - AI uses tools to take actions (speak, update model, visual hints)
+    - AI uses tools to control flow (wait_for_event, set_observation_mode)
     
     Args:
         websocket: WebSocket connection
@@ -200,116 +231,119 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str) -> None:
     preprocessor = server_components.get('preprocessor')
     openrouter = server_components.get('openrouter')
     trigger_detector = server_components.get('trigger_detector')
+    repository = server_components.get('repository')
     
-    # Initialize OODA loop for this session
-    ooda_loop = OODALoop(
-        openrouter_client=openrouter,
-        trigger_detector=trigger_detector,
+    # Load student model
+    student_model = None
+    if repository:
+        try:
+            student_model = await repository.load(session_state.student_id)
+        except Exception as e:
+            logger.error(f"Error loading student model: {e}")
+    
+    if not student_model:
+        logger.warning("[AI] No student model - creating default")
+        student_model = await repository.create_default_model(session_state.student_id)
+    
+    # Pending requests waiting for client response
+    pending_requests: Dict[str, asyncio.Future] = {}
+    request_counter = [0]  # Use list for mutability in nested function
+    
+    async def send_debug(msg: str) -> None:
+        """Send debug message to client."""
+        try:
+            await websocket.send_json({'type': 'debug', 'message': msg, 'timestamp': time.time()})
+        except Exception:
+            pass
+    
+    # Create tool context with all dependencies
+    tool_context = ToolContext(
+        session_state=session_state,
+        student_model=student_model,
+        websocket=websocket,
+        repository=repository,
+        whisper_stt=whisper_stt,
+        vision_analyzer=vision_analyzer,
+        openrouter=openrouter,
+        pending_requests=pending_requests,
+        request_counter=0,
     )
+    
+    # Create tool-based OODA loop
+    tool_ooda = ToolOODALoop(
+        openrouter_client=openrouter,
+        context=tool_context,
+    )
+    
+    async def process_client_response(data: dict) -> None:
+        """Process response from client to a tool request."""
+        request_id = data.get('request_id')
+        if request_id and request_id in pending_requests:
+            # Resolve the pending future
+            pending_requests[request_id].set_result(data)
+            logger.debug(f"[WS] Resolved request: {request_id}")
+        else:
+            logger.warning(f"[WS] Unknown request_id: {request_id}")
+    
+    async def ai_loop():
+        """Background task that runs the AI's tool-based observation loop."""
+        await asyncio.sleep(2.0)  # Initial delay to let client set up
+        logger.info("[AI] Tool-based OODA loop starting")
+        await send_debug("🤖 AI tool-based control starting...")
+        
+        try:
+            await tool_ooda.start()
+        except asyncio.CancelledError:
+            logger.info("[AI] Loop cancelled")
+        except Exception as e:
+            logger.error(f"[AI] Loop error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+    
+    # Start the AI loop
+    ai_task = asyncio.create_task(ai_loop())
     
     try:
         while True:
-            # Receive message from client
+            # Receive messages from client
             data = await websocket.receive_json()
             message_type = data.get('type')
             
-            if message_type == 'audio':
-                # Handle audio chunk
-                audio_data = base64.b64decode(data.get('data', ''))
-                
-                # Transcribe audio using Whisper
-                if whisper_stt and len(audio_data) > 0:
-                    try:
-                        # Use secure temporary file to avoid race conditions and security vulnerabilities
-                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_audio_file:
-                            temp_audio_file.write(audio_data)
-                            temp_audio_file.flush()
-                            
-                            # Transcribe
-                            text = await whisper_stt.transcribe(temp_audio_file.name)
-                        
-                        if text:
-                            # Add to transcript buffer
-                            timestamp = time.time()
-                            session_state.transcript_buffer.append(text, timestamp)
-                            
-                            # Update silence detector
-                            session_state.silence_detector.on_speech()
-                            
-                            # Send transcript back to client
-                            await websocket.send_json({
-                                'type': 'transcript',
-                                'text': text,
-                                'timestamp': timestamp
-                            })
-                            
-                            logger.debug(f"Transcribed: {text}")
-                    except Exception as e:
-                        logger.error(f"Error transcribing audio: {e}")
-                else:
-                    # Update silence detector even if no audio
-                    silence_duration = session_state.silence_detector.get_silence_duration()
-                    session_state.silence_duration = silence_duration
-            
-            elif message_type == 'video':
-                # Handle video frame
-                frame_data = base64.b64decode(data.get('data', ''))
-                
-                if vision_analyzer and preprocessor and len(frame_data) > 0:
-                    try:
-                        # Convert to PIL Image
-                        image = Image.open(io.BytesIO(frame_data))
-                        
-                        # Preprocess image
-                        processed_image = await preprocessor.preprocess(image)
-                        
-                        # Store in session state
-                        session_state.current_problem_image = processed_image
-                        
-                        # Check if we should trigger analysis
-                        if trigger_detector.should_trigger_analysis(session_state):
-                            logger.info("Triggering OODA loop analysis...")
-                            
-                            # Load student model from repository
-                            repository = server_components.get('repository')
-                            student_model = None
-                            if repository:
-                                try:
-                                    student_model = await repository.load(session_state.student_id)
-                                except Exception as e:
-                                    logger.error(f"Error loading student model: {e}")
-                            
-                            # Run OODA loop
-                            decision = await ooda_loop.run_cycle(
-                                session_state=session_state,
-                                student_model=student_model
-                            )
-                            
-                            # If AI decides to speak, send response to client
-                            if decision.action.value == "SPEAK" and decision.response_text:
-                                await websocket.send_json({
-                                    'type': 'ai_response',
-                                    'text': decision.response_text,
-                                    'strategy': decision.strategy.value if decision.strategy else None
-                                })
-                                
-                                logger.info(f"AI Response: {decision.response_text}")
-                    except Exception as e:
-                        logger.error(f"Error processing video frame: {e}")
+            if message_type == 'response':
+                # Client responding to a tool request
+                await process_client_response(data)
             
             elif message_type == 'ping':
-                # Heartbeat
                 await websocket.send_json({'type': 'pong'})
             
+            elif message_type == 'client_event':
+                # Client can send events like "speech_started", "whiteboard_changed"
+                event = data.get('event')
+                logger.debug(f"[WS] Client event: {event}")
+                
+                # Update context for wait_for_event tool
+                if event == 'speech_started':
+                    tool_context.last_speech_time = time.time()
+                elif event == 'whiteboard_changed':
+                    tool_context.last_whiteboard_change = time.time()
+            
             else:
-                logger.warning(f"Unknown message type: {message_type}")
+                logger.debug(f"[WS] Received: type={message_type}")
     
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session: {session_id}")
-        if session_id in active_connections:
-            del active_connections[session_id]
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+    finally:
+        # Clean up
+        await tool_ooda.stop()
+        ai_task.cancel()
+        try:
+            await ai_task
+        except asyncio.CancelledError:
+            pass
         if session_id in active_connections:
             del active_connections[session_id]
 

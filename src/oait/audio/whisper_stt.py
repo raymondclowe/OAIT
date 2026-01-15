@@ -1,7 +1,7 @@
 """Local Faster-Whisper speech-to-text service."""
 
 import logging
-from typing import Optional, Literal
+from typing import Optional, Literal, Union
 from faster_whisper import WhisperModel
 import numpy as np
 
@@ -71,23 +71,46 @@ class WhisperSTT:
             logger.error(f"Transcription error: {e}")
             return ""
 
-    async def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
+    async def transcribe(self, audio: Union[np.ndarray, str], sample_rate: int = 16000) -> str:
         """Transcribe audio to text (async wrapper for thread pool execution).
 
         Args:
-            audio: Audio data as numpy array
+            audio: Audio data as numpy array OR file path string
             sample_rate: Sample rate of audio (default 16000)
 
         Returns:
             Transcribed text
         """
         import asyncio
+        
+        # Handle file path input
+        if isinstance(audio, str):
+            try:
+                import soundfile as sf
+                audio_data, sr = sf.read(audio)
+                # Convert to float32 if needed
+                if audio_data.dtype != np.float32:
+                    audio_data = audio_data.astype(np.float32)
+                # Convert stereo to mono if needed
+                if len(audio_data.shape) > 1:
+                    audio_data = audio_data.mean(axis=1)
+                return await asyncio.to_thread(self.transcribe_sync, audio_data, sr)
+            except ImportError:
+                logger.error("soundfile not installed. Run: pip install soundfile")
+                return ""
+            except Exception as e:
+                logger.error(f"Error reading audio file: {e}")
+                return ""
+        
         # Run CPU-bound transcription in thread pool
         return await asyncio.to_thread(self.transcribe_sync, audio, sample_rate)
 
     def unload_model(self) -> None:
-        """Unload the model to free memory."""
+        """Unload the model to free memory and release resources."""
         if self.model is not None:
+            # Force garbage collection to release any semaphores/locks
+            import gc
             del self.model
             self.model = None
+            gc.collect()
             logger.info("Whisper model unloaded")

@@ -179,6 +179,17 @@
             ⚫ Disconnected
         </div>
         
+        <!-- Audio level indicator -->
+        <div id="audioLevelContainer" style="display: none; margin-bottom: 15px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span>🎤 Audio Level:</span>
+                <div style="flex: 1; height: 20px; background: #e2e8f0; border-radius: 10px; overflow: hidden;">
+                    <div id="audioLevelBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #48bb78, #f6e05e, #f56565); transition: width 0.1s;"></div>
+                </div>
+                <span id="audioStatus" style="min-width: 80px;">Silent</span>
+            </div>
+        </div>
+        
         <div class="workspace">
             <div class="panel">
                 <h2>📝 Whiteboard</h2>
@@ -203,9 +214,21 @@
                 </p>
             </div>
         </div>
+        
+        <div class="panel" style="margin-top: 20px;">
+            <h2>🔧 Debug Log <button id="clearDebug" style="padding: 4px 8px; font-size: 12px; margin-left: 10px;">Clear</button></h2>
+            <div id="debugLog" class="debug-area" style="height: 200px; overflow-y: auto; background: #1a202c; border: 2px solid #4a5568; border-radius: 8px; padding: 15px; font-family: monospace; font-size: 12px; color: #68d391;">
+                <p style="color: #a0aec0;">Debug messages will appear here...</p>
+            </div>
+        </div>
     </div>
     
     <script>
+        // =====================================================
+        // PULL-BASED ARCHITECTURE
+        // Client buffers data locally, server requests when needed
+        // =====================================================
+        
         let ws = null;
         let sessionId = null;
         let audioContext = null;
@@ -213,6 +236,27 @@
         let isRecording = false;
         let canvas = null;
         let ctx = null;
+        
+        // =====================================================
+        // CLIENT-SIDE BUFFERS (AI pulls from these on demand)
+        // =====================================================
+        const clientBuffers = {
+            // Audio buffer - stores recent speech segments
+            audio: {
+                segments: [],           // Array of {data: Float32Array, timestamp: number}
+                maxDurationMs: 30000,   // Keep 30 seconds of audio
+                currentSegment: [],     // Current speech being recorded
+                speechStartTime: null,
+                lastSpeechTime: null,
+            },
+            // Whiteboard - latest canvas state
+            whiteboard: {
+                lastChange: null,       // Timestamp of last drawing
+                hasChanges: false,      // Whether whiteboard changed since last request
+            },
+            // Transcript - recent speech transcripts from server
+            transcripts: [],            // Array of {text, timestamp}
+        };
         
         const statusDiv = document.getElementById('status');
         const startSessionBtn = document.getElementById('startSession');
@@ -222,6 +266,13 @@
         const studentIdInput = document.getElementById('studentId');
         const transcriptDiv = document.getElementById('transcript');
         const aiResponsesDiv = document.getElementById('aiResponses');
+        const debugLogDiv = document.getElementById('debugLog');
+        const clearDebugBtn = document.getElementById('clearDebug');
+        
+        // Clear debug log
+        clearDebugBtn.addEventListener('click', () => {
+            debugLogDiv.innerHTML = '<p style="color: #a0aec0;">Debug cleared...</p>';
+        });
         
         // Initialize canvas
         canvas = document.getElementById('whiteboard');
@@ -229,7 +280,7 @@
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
         
-        // Simple drawing functionality
+        // Simple drawing functionality with change tracking
         let isDrawing = false;
         let lastX = 0;
         let lastY = 0;
@@ -249,6 +300,10 @@
             ctx.lineCap = 'round';
             ctx.stroke();
             [lastX, lastY] = [e.offsetX, e.offsetY];
+            
+            // Mark whiteboard as changed
+            clientBuffers.whiteboard.lastChange = Date.now();
+            clientBuffers.whiteboard.hasChanges = true;
         });
         
         canvas.addEventListener('mouseup', () => {
@@ -259,29 +314,118 @@
             isDrawing = false;
         });
         
-        function sendCanvasFrame() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        // =====================================================
+        // RESPOND TO SERVER REQUESTS (AI Tool Calls)
+        // =====================================================
+        function handleServerRequest(request) {
+            const requestId = request.request_id;
+            const resource = request.resource;
             
-            canvas.toBlob((blob) => {
+            addDebug(`📥 AI requested: ${resource}`);
+            console.log('[REQUEST]', resource, requestId);
+            
+            if (resource === 'audio') {
+                // Send buffered audio segments
+                const audioData = getBufferedAudio();
+                ws.send(JSON.stringify({
+                    type: 'response',
+                    request_id: requestId,
+                    resource: 'audio',
+                    data: audioData.base64,
+                    duration_ms: audioData.durationMs,
+                    has_speech: audioData.hasSpeech,
+                }));
+                addDebug(`📤 Sent ${audioData.durationMs}ms audio (speech: ${audioData.hasSpeech})`);
+                
+            } else if (resource === 'whiteboard') {
+                // Send current whiteboard image
+                canvas.toBlob((blob) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const base64 = reader.result.split(',')[1];
+                        ws.send(JSON.stringify({
+                            type: 'response',
+                            request_id: requestId,
+                            resource: 'whiteboard',
+                            data: base64,
+                            has_changes: clientBuffers.whiteboard.hasChanges,
+                            last_change: clientBuffers.whiteboard.lastChange,
+                        }));
+                        // Reset change tracking
+                        clientBuffers.whiteboard.hasChanges = false;
+                        addDebug(`📤 Sent whiteboard image`);
+                    };
+                    reader.readAsDataURL(blob);
+                }, 'image/png');
+                
+            } else if (resource === 'status') {
+                // Send client status summary
+                ws.send(JSON.stringify({
+                    type: 'response',
+                    request_id: requestId,
+                    resource: 'status',
+                    data: {
+                        audio_recording: isRecording,
+                        audio_segments: clientBuffers.audio.segments.length,
+                        whiteboard_has_changes: clientBuffers.whiteboard.hasChanges,
+                        transcript_count: clientBuffers.transcripts.length,
+                    }
+                }));
+                addDebug(`📤 Sent status`);
+            }
+        }
+        
+        // Get buffered audio as WAV base64
+        function getBufferedAudio() {
+            // Combine all audio segments
+            const allSamples = [];
+            let totalLength = 0;
+            
+            for (const segment of clientBuffers.audio.segments) {
+                totalLength += segment.data.length;
+                allSamples.push(segment.data);
+            }
+            
+            // Also include current segment if any
+            for (const chunk of clientBuffers.audio.currentSegment) {
+                totalLength += chunk.length;
+                allSamples.push(chunk);
+            }
+            
+            if (totalLength === 0) {
+                return { base64: '', durationMs: 0, hasSpeech: false };
+            }
+            
+            // Combine into single array
+            const combined = new Float32Array(totalLength);
+            let offset = 0;
+            for (const samples of allSamples) {
+                combined.set(samples, offset);
+                offset += samples.length;
+            }
+            
+            const sampleRate = audioContext ? audioContext.sampleRate : 48000;
+            const durationMs = (totalLength / sampleRate * 1000).toFixed(0);
+            
+            // Convert to WAV
+            const wavBlob = float32ToWav(combined, sampleRate);
+            
+            // Convert to base64 synchronously using array buffer
+            return new Promise((resolve) => {
                 const reader = new FileReader();
                 reader.onload = () => {
                     const base64 = reader.result.split(',')[1];
-                    ws.send(JSON.stringify({
-                        type: 'video',
-                        data: base64
-                    }));
+                    // Clear the segments after sending
+                    clientBuffers.audio.segments = [];
+                    resolve({ base64, durationMs: parseInt(durationMs), hasSpeech: true });
                 };
-                reader.readAsDataURL(blob);
-            }, 'image/png');
+                reader.readAsDataURL(wavBlob);
+            });
         }
         
-        // Send canvas frame every 3 seconds
-        setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                sendCanvasFrame();
-            }
-        }, 3000);
-        
+        // =====================================================
+        // SESSION MANAGEMENT
+        // =====================================================
         startSessionBtn.addEventListener('click', async () => {
             const studentId = studentIdInput.value.trim();
             if (!studentId) {
@@ -307,16 +451,39 @@
                     stopSessionBtn.disabled = false;
                     startAudioBtn.disabled = false;
                     studentIdInput.disabled = true;
+                    addDebug('🔗 Connected to server');
                 };
                 
-                ws.onmessage = (event) => {
+                ws.onmessage = async (event) => {
                     const message = JSON.parse(event.data);
+                    console.log('[WS]', message);
                     
-                    if (message.type === 'transcript') {
+                    if (message.type === 'request') {
+                        // AI is requesting data - respond with buffered content
+                        const audioResult = await handleServerRequest(message);
+                        
+                    } else if (message.type === 'transcript') {
                         addTranscript(message.text, message.timestamp);
+                        clientBuffers.transcripts.push({text: message.text, timestamp: message.timestamp});
+                        // Keep only last 20 transcripts
+                        if (clientBuffers.transcripts.length > 20) {
+                            clientBuffers.transcripts.shift();
+                        }
+                        addDebug(`📝 Transcript: ${message.text}`);
+                        
                     } else if (message.type === 'ai_response') {
                         addAIResponse(message.text, message.strategy);
+                        addDebug(`🤖 AI: ${message.text}`);
                         speakText(message.text);
+                        
+                    } else if (message.type === 'debug') {
+                        addDebug(`🔧 ${message.message}`);
+                        console.log('[DEBUG]', message.message);
+                        
+                    } else if (message.type === 'pong') {
+                        // Heartbeat response
+                    } else {
+                        console.log('[WS] Unknown message:', message);
                     }
                 };
                 
@@ -327,10 +494,12 @@
                     startAudioBtn.disabled = true;
                     stopAudioBtn.disabled = true;
                     studentIdInput.disabled = false;
+                    addDebug('🔌 Disconnected from server');
                 };
                 
                 ws.onerror = (error) => {
                     console.error('WebSocket error:', error);
+                    addDebug('❌ WebSocket error');
                 };
                 
             } catch (error) {
@@ -357,6 +526,9 @@
             sessionId = null;
         });
         
+        // =====================================================
+        // AUDIO RECORDING (Buffers locally, doesn't send)
+        // =====================================================
         startAudioBtn.addEventListener('click', async () => {
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -364,29 +536,115 @@
                 const source = audioContext.createMediaStreamSource(mediaStream);
                 const processor = audioContext.createScriptProcessor(4096, 1, 1);
                 
+                // Voice Activity Detection (VAD) settings
+                const SILENCE_THRESHOLD = 0.01;
+                const SILENCE_DURATION_MS = 500;
+                const MIN_SPEECH_DURATION_MS = 200;
+                const MAX_BUFFER_MS = 30000; // 30 seconds max buffer
+                
+                // Calculate RMS of audio samples
+                function calculateRMS(samples) {
+                    let sum = 0;
+                    for (let i = 0; i < samples.length; i++) {
+                        sum += samples[i] * samples[i];
+                    }
+                    return Math.sqrt(sum / samples.length);
+                }
+                
+                // Finalize current speech segment
+                function finalizeSegment() {
+                    if (clientBuffers.audio.currentSegment.length === 0) return;
+                    
+                    // Combine current segment chunks
+                    const totalLength = clientBuffers.audio.currentSegment.reduce((sum, arr) => sum + arr.length, 0);
+                    const combined = new Float32Array(totalLength);
+                    let offset = 0;
+                    for (const chunk of clientBuffers.audio.currentSegment) {
+                        combined.set(chunk, offset);
+                        offset += chunk.length;
+                    }
+                    
+                    const durationMs = (totalLength / audioContext.sampleRate * 1000);
+                    
+                    // Only keep if long enough
+                    if (durationMs >= MIN_SPEECH_DURATION_MS) {
+                        clientBuffers.audio.segments.push({
+                            data: combined,
+                            timestamp: clientBuffers.audio.speechStartTime,
+                        });
+                        addDebug(`💾 Buffered ${durationMs.toFixed(0)}ms speech segment`);
+                        
+                        // Trim old segments if buffer too large
+                        trimAudioBuffer();
+                    }
+                    
+                    // Reset current segment
+                    clientBuffers.audio.currentSegment = [];
+                    clientBuffers.audio.speechStartTime = null;
+                    clientBuffers.audio.lastSpeechTime = null;
+                }
+                
+                // Trim audio buffer to max duration
+                function trimAudioBuffer() {
+                    let totalDuration = 0;
+                    for (const seg of clientBuffers.audio.segments) {
+                        totalDuration += seg.data.length / audioContext.sampleRate * 1000;
+                    }
+                    
+                    while (totalDuration > MAX_BUFFER_MS && clientBuffers.audio.segments.length > 1) {
+                        const removed = clientBuffers.audio.segments.shift();
+                        totalDuration -= removed.data.length / audioContext.sampleRate * 1000;
+                    }
+                }
+                
                 source.connect(processor);
                 processor.connect(audioContext.destination);
                 
+                // UI elements for audio level
+                const audioLevelContainer = document.getElementById('audioLevelContainer');
+                const audioLevelBar = document.getElementById('audioLevelBar');
+                const audioStatus = document.getElementById('audioStatus');
+                audioLevelContainer.style.display = 'block';
+                
                 processor.onaudioprocess = (e) => {
-                    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+                    if (!isRecording) return;
                     
                     const audioData = e.inputBuffer.getChannelData(0);
-                    const audioBlob = float32ToWav(audioData, audioContext.sampleRate);
+                    const rms = calculateRMS(audioData);
+                    const now = Date.now();
                     
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                        const base64 = reader.result.split(',')[1];
-                        ws.send(JSON.stringify({
-                            type: 'audio',
-                            data: base64
-                        }));
-                    };
-                    reader.readAsDataURL(audioBlob);
+                    // Update audio level indicator
+                    const levelPercent = Math.min(100, (rms / 0.3) * 100);
+                    audioLevelBar.style.width = levelPercent + '%';
+                    
+                    if (rms > SILENCE_THRESHOLD) {
+                        // Speech detected - buffer it
+                        audioStatus.textContent = '🗣️ Speaking';
+                        audioStatus.style.color = '#38a169';
+                        
+                        if (!clientBuffers.audio.speechStartTime) {
+                            clientBuffers.audio.speechStartTime = now;
+                        }
+                        clientBuffers.audio.lastSpeechTime = now;
+                        clientBuffers.audio.currentSegment.push(new Float32Array(audioData));
+                        
+                    } else {
+                        // Silence
+                        audioStatus.textContent = '🔇 Silent';
+                        audioStatus.style.color = '#718096';
+                        
+                        // Check if we should finalize current segment
+                        if (clientBuffers.audio.lastSpeechTime && 
+                            (now - clientBuffers.audio.lastSpeechTime) >= SILENCE_DURATION_MS) {
+                            finalizeSegment();
+                        }
+                    }
                 };
                 
                 isRecording = true;
                 startAudioBtn.disabled = true;
                 stopAudioBtn.disabled = false;
+                addDebug('🎤 Audio recording started (buffering locally)');
                 
             } catch (error) {
                 console.error('Error accessing microphone:', error);
@@ -402,10 +660,15 @@
             if (audioContext) {
                 audioContext.close();
             }
+            document.getElementById('audioLevelContainer').style.display = 'none';
             startAudioBtn.disabled = false;
             stopAudioBtn.disabled = true;
+            addDebug('🎤 Audio recording stopped');
         });
         
+        // =====================================================
+        // UI HELPERS
+        // =====================================================
         function updateStatus(connected) {
             if (connected) {
                 statusDiv.textContent = '🟢 Connected';
@@ -417,7 +680,7 @@
         }
         
         function addTranscript(text, timestamp) {
-            const time = new Date(timestamp).toLocaleTimeString();
+            const time = new Date(timestamp * 1000).toLocaleTimeString();
             const item = document.createElement('div');
             item.className = 'transcript-item';
             item.innerHTML = `
@@ -438,6 +701,17 @@
             aiResponsesDiv.prepend(item);
         }
         
+        function addDebug(message) {
+            const time = new Date().toLocaleTimeString();
+            const item = document.createElement('div');
+            item.style.marginBottom = '4px';
+            item.innerHTML = `<span style="color: #718096;">[${time}]</span> ${message}`;
+            debugLogDiv.prepend(item);
+            while (debugLogDiv.children.length > 100) {
+                debugLogDiv.removeChild(debugLogDiv.lastChild);
+            }
+        }
+        
         function speakText(text) {
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.rate = 0.9;
@@ -449,7 +723,6 @@
             const buffer = new ArrayBuffer(44 + float32Array.length * 2);
             const view = new DataView(buffer);
             
-            // WAV header
             writeString(view, 0, 'RIFF');
             view.setUint32(4, 36 + float32Array.length * 2, true);
             writeString(view, 8, 'WAVE');
@@ -464,7 +737,6 @@
             writeString(view, 36, 'data');
             view.setUint32(40, float32Array.length * 2, true);
             
-            // Audio data
             let offset = 44;
             for (let i = 0; i < float32Array.length; i++, offset += 2) {
                 const s = Math.max(-1, Math.min(1, float32Array[i]));

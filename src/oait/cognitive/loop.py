@@ -122,7 +122,7 @@ Analyze the situation and decide what to do."""
             },
         )
 
-        logger.debug(f"Observation: visual={bool(visual)}, audio={bool(audio)}")
+        logger.info(f"[OBSERVE] visual='{visual[:50]}...' audio='{audio[:100] if audio else '(none)'}' silence={session_state.silence_duration:.1f}s")
         return observation
 
     async def orient(
@@ -156,7 +156,7 @@ Analyze the situation and decide what to do."""
             analysis.student_state = StudentState.STUCK
             analysis.confidence = 0.7
 
-        logger.debug(f"Analysis: state={analysis.student_state}, confidence={analysis.confidence}")
+        logger.info(f"[ORIENT] state={analysis.student_state.value} confidence={analysis.confidence:.2f} explicit_q={analysis.explicit_question}")
         return analysis
 
     async def decide(
@@ -177,29 +177,87 @@ Analyze the situation and decide what to do."""
         """
         # Priority 1: Explicit question
         if analysis.explicit_question:
-            return Decision(
+            decision = Decision(
                 action=ActionDecision.SPEAK,
                 reasoning="Student asked an explicit question",
                 confidence=0.9,
             )
+            decision.response_text = await self._generate_response(
+                analysis, student_model, session_state, decision
+            )
+            logger.info(f"[DECIDE] action=SPEAK reason='explicit question' response='{decision.response_text[:50]}...'")
+            return decision
 
         # Priority 2: Extended stuck state
         if (
             analysis.student_state == StudentState.STUCK
             and session_state.silence_duration > student_model.pedagogy_profile.optimal_intervention_delay * 2
         ):
-            return Decision(
+            decision = Decision(
                 action=ActionDecision.SPEAK,
                 reasoning="Student appears stuck for extended period",
                 confidence=0.7,
             )
+            decision.response_text = await self._generate_response(
+                analysis, student_model, session_state, decision
+            )
+            logger.info(f"[DECIDE] action=SPEAK reason='stuck' response='{decision.response_text[:50]}...'")
+            return decision
 
         # Default: Wait and observe more
-        return Decision(
+        decision = Decision(
             action=ActionDecision.WAIT,
             reasoning="Student appears to be working, continue observing",
             confidence=analysis.confidence,
         )
+        logger.info(f"[DECIDE] action={decision.action.value} reason='{decision.reasoning}'")
+        return decision
+
+    async def _generate_response(
+        self,
+        analysis: Analysis,
+        student_model: StudentModel,
+        session_state: SessionState,
+        decision: Decision,
+    ) -> str:
+        """Generate intervention response using LLM.
+        
+        Args:
+            analysis: Current analysis
+            student_model: Student model  
+            session_state: Session state
+            decision: The decision made
+            
+        Returns:
+            Response text to speak to student
+        """
+        recent = session_state.get_recent_transcripts(30.0)
+        transcript_text = " ".join([t.text for t in recent]) if recent else "No recent speech"
+        
+        system_prompt = """You are a patient, supportive AI math tutor. 
+Generate a brief, helpful response based on the student's current state.
+Use Socratic questioning when appropriate. Be encouraging but concise.
+Keep responses to 1-2 sentences."""
+
+        user_prompt = f"""Student state: {analysis.student_state.value}
+Intervention reason: {decision.reasoning}
+Recent transcript: {transcript_text}
+Learning style: {student_model.pedagogy_profile.preferred_learning_style.value}
+
+Generate a short, helpful response:"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        
+        try:
+            response = await self.client.chat(messages=messages, temperature=0.7)
+            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return content if content else "I notice you might need some help. What are you working on?"
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            return "I notice you might need some help. What are you working on?"
 
     async def act(self, decision: Decision, session_state: SessionState) -> None:
         """Act phase: Execute the decision.
@@ -238,6 +296,8 @@ Analyze the situation and decide what to do."""
         Returns:
             Internal monologue if cycle completed, None otherwise
         """
+        logger.info("="*60)
+        logger.info("[OODA CYCLE START]")
         try:
             # Observe
             observation = await self.observe(session_state)
@@ -261,10 +321,14 @@ Analyze the situation and decide what to do."""
             # Store in session state
             session_state.add_monologue(monologue)
 
+            logger.info(f"[OODA CYCLE END] action={decision.action.value}")
+            logger.info("="*60)
             return monologue
 
         except Exception as e:
             logger.error(f"OODA cycle error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
 
     async def start(self, session_state: SessionState, student_model: StudentModel) -> None:
