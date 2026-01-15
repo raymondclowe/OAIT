@@ -29,7 +29,7 @@ def test_get_settings_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     settings2 = get_settings()
     
     assert settings1 is settings2
-    assert settings1.openrouter_api_key == "test_key_123"
+    assert settings1.openrouter_api_key.get_secret_value() == "test_key_123"
     
     reset_settings()
 

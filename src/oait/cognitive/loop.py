@@ -38,6 +38,60 @@ class OODALoop:
         self.trigger_detector = trigger_detector
         self.is_running = False
 
+    async def generate_internal_monologue(
+        self,
+        observation: Observation,
+        student_model: StudentModel,
+        session_state: SessionState,
+    ) -> dict:
+        """Generate internal monologue about student state using LLM.
+
+        Args:
+            observation: Current observation
+            student_model: Student model
+            session_state: Current session state
+
+        Returns:
+            LLM response with analysis and decision
+        """
+        system_prompt = """You are an expert AI tutor observing a student working on a problem.
+        
+Your role is to:
+1. Analyze what the student is doing
+2. Determine if they need help
+3. Decide whether to intervene or continue observing
+
+Think carefully about pedagogical best practices:
+- Don't interrupt if the student is making progress
+- Wait for them to struggle briefly before helping
+- Use Socratic questioning when appropriate
+- Only intervene when truly necessary
+
+Respond with your internal analysis and decision."""
+
+        user_prompt = f"""Current Observation:
+- Visual: {observation.visual}
+- Audio: {observation.audio}
+- Context: {observation.context}
+
+Student Profile:
+- Patience Level: {student_model.pedagogy_profile.patience_level}
+- Learning Style: {student_model.pedagogy_profile.preferred_learning_style}
+
+Session State:
+- Silence Duration: {session_state.silence_duration} seconds
+- Last Intervention: {session_state.last_intervention_time} seconds ago
+
+Analyze the situation and decide what to do."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        response = await self.client.chat(messages=messages, temperature=0.3)
+        return response
+
     async def observe(self, session_state: SessionState) -> Observation:
         """Observe phase: Gather current state.
 

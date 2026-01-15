@@ -1,6 +1,7 @@
 """Configuration management for OAIT."""
 
 from typing import Literal
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,7 +15,7 @@ class Settings(BaseSettings):
     )
 
     # OpenRouter API Configuration (REQUIRED - Only Cloud Dependency)
-    openrouter_api_key: str
+    openrouter_api_key: SecretStr
     openrouter_model: str = "google/gemini-3.0-pro"
 
     # Server Configuration

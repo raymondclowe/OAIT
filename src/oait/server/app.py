@@ -9,7 +9,6 @@ from ..api.openrouter import OpenRouterClient
 from ..audio.whisper_stt import WhisperSTT
 from ..audio.stream_handler import TranscriptBuffer, SilenceDetector
 from ..vision.analyzer import VisionAnalyzer
-from ..vision.preprocessor import ImagePreprocessor
 from ..cognitive.loop import OODALoop
 from ..cognitive.triggers import TriggerDetector
 from ..models.data_models import SessionState
@@ -49,7 +48,7 @@ class OAITServer:
 
         # Initialize OpenRouter client
         self.openrouter_client = OpenRouterClient(
-            api_key=self.settings.openrouter_api_key,
+            api_key=self.settings.openrouter_api_key.get_secret_value(),
             model=self.settings.openrouter_model,
         )
 

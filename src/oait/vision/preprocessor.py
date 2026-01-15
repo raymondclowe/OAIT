@@ -14,6 +14,7 @@ class ImagePreprocessor:
         self,
         target_size: Tuple[int, int] = (1024, 768),
         enhance_contrast: bool = True,
+        contrast_factor: float = 1.5,
         sharpen: bool = True,
     ):
         """Initialize image preprocessor.
@@ -21,10 +22,12 @@ class ImagePreprocessor:
         Args:
             target_size: Target size for resized images
             enhance_contrast: Whether to enhance contrast
+            contrast_factor: Contrast enhancement factor (default 1.5)
             sharpen: Whether to sharpen the image
         """
         self.target_size = target_size
         self.enhance_contrast = enhance_contrast
+        self.contrast_factor = contrast_factor
         self.sharpen = sharpen
 
     def preprocess(self, image: Image.Image) -> Image.Image:
@@ -47,7 +50,7 @@ class ImagePreprocessor:
             # Enhance contrast
             if self.enhance_contrast:
                 enhancer = ImageEnhance.Contrast(image)
-                image = enhancer.enhance(1.5)
+                image = enhancer.enhance(self.contrast_factor)
 
             # Sharpen
             if self.sharpen:

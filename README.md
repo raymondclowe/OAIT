@@ -86,9 +86,6 @@ cd OAIT
 # Install dependencies
 pip install -r requirements.txt
 
-# Install Whisper for local STT
-pip install faster-whisper
-
 # Configure API keys
 cp .env.example .env
 # Edit .env with your OpenRouter API key

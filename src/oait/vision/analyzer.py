@@ -8,6 +8,9 @@ from ..api.openrouter import OpenRouterClient
 
 logger = logging.getLogger(__name__)
 
+# Constants for change detection
+DIFF_RESIZE_TARGET = (100, 100)  # Target size for image comparison
+
 
 class VisionAnalyzer:
     """Analyzes whiteboard images using vision LLM."""
@@ -94,8 +97,8 @@ Be concise but thorough."""
             # More sophisticated change detection can be added later
 
             # Resize to same size for comparison
-            prev_resized = prev_image.resize((100, 100))
-            curr_resized = curr_image.resize((100, 100))
+            prev_resized = prev_image.resize(DIFF_RESIZE_TARGET)
+            curr_resized = curr_image.resize(DIFF_RESIZE_TARGET)
 
             # Convert to grayscale
             prev_gray = prev_resized.convert("L")

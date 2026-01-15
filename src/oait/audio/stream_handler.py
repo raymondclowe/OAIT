@@ -3,6 +3,8 @@
 import logging
 import asyncio
 from typing import Optional, Callable
+from collections import deque
+from collections.abc import Deque
 import numpy as np
 from datetime import datetime
 
@@ -71,7 +73,7 @@ class TranscriptBuffer:
             duration: Duration of the sliding window in seconds
         """
         self.duration = duration
-        self.buffer: list = []
+        self.buffer: Deque = deque()
 
     def append(self, text: str, timestamp: Optional[float] = None) -> None:
         """Add a transcript to the buffer.
@@ -116,7 +118,8 @@ class TranscriptBuffer:
     def _cleanup(self) -> None:
         """Remove entries older than the buffer duration."""
         cutoff = datetime.now().timestamp() - self.duration
-        self.buffer = [entry for entry in self.buffer if entry["timestamp"] > cutoff]
+        while self.buffer and self.buffer[0]["timestamp"] < cutoff:
+            self.buffer.popleft()
 
 
 class SilenceDetector:

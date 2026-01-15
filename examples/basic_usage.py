@@ -2,8 +2,7 @@
 
 import asyncio
 import os
-from oait.config import get_settings, reset_settings
-from oait.models import StudentModel, SessionState, StudentModelRepository
+from oait.models import StudentModel, SessionState, StudentModelRepository, CompetencyLevel
 from oait.api.openrouter import OpenRouterClient
 
 
@@ -20,7 +19,6 @@ async def example_student_model() -> None:
     print(f"Created student: {student.student_id}")
     
     # Update competency
-    from oait.models import CompetencyLevel
     student.update_competency("algebra", CompetencyLevel.MASTERED)
     print(f"Updated competency: algebra -> {student.competencies['algebra']}")
     
