@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAIT - Transcript</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f7fafc;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: white;
+            padding: 10px 15px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #3182ce;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        button {
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover { background: #ebf8ff; border-color: #3182ce; }
+        
+        .transcript-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        
+        .transcript-item {
+            background: white;
+            border-left: 3px solid #3182ce;
+            border-radius: 0 8px 8px 0;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .transcript-time {
+            font-size: 11px;
+            color: #718096;
+            margin-bottom: 4px;
+        }
+        
+        .transcript-text {
+            color: #2d3748;
+            line-height: 1.5;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #a0aec0;
+            padding: 50px 20px;
+        }
+        
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .status-bar {
+            background: white;
+            padding: 8px 15px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 12px;
+            color: #718096;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #a0aec0;
+        }
+        
+        .status-dot.connected { background: #48bb78; }
+        .status-dot.speaking { background: #f6e05e; animation: pulse 0.5s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.2); }
+        }
+        
+        .new-transcript {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="title">💬 Transcript</span>
+        <div class="controls">
+            <button id="clearBtn">🗑️ Clear</button>
+            <button id="exportBtn">📋 Copy All</button>
+        </div>
+    </div>
+    
+    <div id="transcriptContainer" class="transcript-container">
+        <div class="empty-state">
+            <div class="empty-icon">💬</div>
+            <p>Speech transcripts will appear here...</p>
+            <p style="font-size: 12px; margin-top: 10px;">Start audio from the Controls panel</p>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+        <span id="transcriptCount">0 transcripts</span>
+    </div>
+    
+    <script>
+        // Get session from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        let sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            const saved = localStorage.getItem('oait_session');
+            if (saved) {
+                sessionId = JSON.parse(saved).sessionId;
+            }
+        }
+        
+        let ws = null;
+        const transcripts = [];
+        const container = document.getElementById('transcriptContainer');
+        
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            transcripts.length = 0;
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">💬</div>
+                    <p>Transcripts cleared</p>
+                </div>
+            `;
+            updateCount();
+        });
+        
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const text = transcripts.map(t => `[${t.time}] ${t.text}`).join('\n');
+            navigator.clipboard.writeText(text);
+            alert('Transcripts copied to clipboard!');
+        });
+        
+        function addTranscript(text, timestamp) {
+            const time = new Date(timestamp * 1000).toLocaleTimeString();
+            transcripts.push({ text, time, timestamp });
+            
+            // Remove empty state if present
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const item = document.createElement('div');
+            item.className = 'transcript-item new-transcript';
+            item.innerHTML = `
+                <div class="transcript-time">${time}</div>
+                <div class="transcript-text">${escapeHtml(text)}</div>
+            `;
+            
+            container.appendChild(item);
+            container.scrollTop = container.scrollHeight;
+            
+            updateCount();
+            
+            // Remove animation class after animation completes
+            setTimeout(() => item.classList.remove('new-transcript'), 300);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function updateCount() {
+            document.getElementById('transcriptCount').textContent = 
+                `${transcripts.length} transcript${transcripts.length !== 1 ? 's' : ''}`;
+        }
+        
+        function updateStatus(state, text) {
+            const dot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            dot.className = 'status-dot ' + state;
+            statusText.textContent = text;
+        }
+        
+        // WebSocket connection
+        function connect() {
+            if (!sessionId) {
+                updateStatus('', 'No session');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}`);
+            
+            ws.onopen = () => updateStatus('connected', 'Connected');
+            ws.onclose = () => {
+                updateStatus('', 'Disconnected');
+                setTimeout(connect, 3000);
+            };
+            ws.onerror = () => updateStatus('', 'Error');
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+        
+        function handleMessage(data) {
+            if (data.type === 'transcript') {
+                addTranscript(data.text, data.timestamp);
+                updateStatus('speaking', 'New transcript');
+                setTimeout(() => updateStatus('connected', 'Connected'), 1000);
+            }
+        }
+        
+        // Listen for session changes
+        const channel = new BroadcastChannel('oait_session');
+        channel.onmessage = (event) => {
+            if (event.data.type === 'session_started') {
+                sessionId = event.data.sessionId;
+                connect();
+            } else if (event.data.type === 'session_stopped') {
+                if (ws) ws.close();
+                sessionId = null;
+                updateStatus('', 'Session ended');
+            }
+        };
+        
+        connect();
+    </script>
+</body>
+</html>

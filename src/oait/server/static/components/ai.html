@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAIT - AI Responses</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0fff4;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: white;
+            padding: 10px 15px;
+            border-bottom: 1px solid #c6f6d5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #38a169;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        button {
+            padding: 6px 12px;
+            border: 1px solid #c6f6d5;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover { background: #f0fff4; border-color: #38a169; }
+        button.active { background: #38a169; color: white; }
+        
+        .response-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+        
+        .ai-response {
+            background: white;
+            border-left: 3px solid #38a169;
+            border-radius: 0 12px 12px 0;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        
+        .ai-response.speaking {
+            border-left-color: #f6e05e;
+            animation: speaking 0.5s ease-in-out infinite alternate;
+        }
+        
+        @keyframes speaking {
+            from { box-shadow: 0 2px 8px rgba(246, 224, 94, 0.3); }
+            to { box-shadow: 0 2px 16px rgba(246, 224, 94, 0.6); }
+        }
+        
+        .ai-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .ai-time {
+            font-size: 11px;
+            color: #718096;
+        }
+        
+        .ai-tone {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        
+        .ai-tone.encouraging { background: #c6f6d5; color: #22543d; }
+        .ai-tone.questioning { background: #bee3f8; color: #2a4365; }
+        .ai-tone.excited { background: #fefcbf; color: #744210; }
+        
+        .ai-text {
+            color: #2d3748;
+            line-height: 1.6;
+            font-size: 15px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #a0aec0;
+            padding: 50px 20px;
+        }
+        
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        .status-bar {
+            background: white;
+            padding: 8px 15px;
+            border-top: 1px solid #c6f6d5;
+            font-size: 12px;
+            color: #718096;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #a0aec0;
+        }
+        
+        .status-dot.connected { background: #48bb78; }
+        .status-dot.speaking { background: #f6e05e; animation: pulse 0.3s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+        }
+        
+        .visual-hint {
+            background: linear-gradient(135deg, #ebf8ff 0%, #e6fffa 100%);
+            border: 2px solid #4fd1c5;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .hint-label {
+            font-size: 11px;
+            color: #285e61;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        
+        .hint-content {
+            color: #234e52;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="title">🤖 AI Responses</span>
+        <div class="controls">
+            <button id="ttsToggle" class="active">🔊 TTS On</button>
+            <button id="clearBtn">🗑️ Clear</button>
+        </div>
+    </div>
+    
+    <div id="responseContainer" class="response-container">
+        <div class="empty-state">
+            <div class="empty-icon">🤖</div>
+            <p>AI responses will appear here...</p>
+            <p style="font-size: 12px; margin-top: 10px;">The tutor will speak when you need help</p>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+        <span id="responseCount">0 responses</span>
+    </div>
+    
+    <script>
+        // Get session from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        let sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            const saved = localStorage.getItem('oait_session');
+            if (saved) {
+                sessionId = JSON.parse(saved).sessionId;
+            }
+        }
+        
+        let ws = null;
+        let ttsEnabled = true;
+        let currentlySpeaking = null;
+        const responses = [];
+        const container = document.getElementById('responseContainer');
+        
+        // TTS toggle
+        const ttsToggle = document.getElementById('ttsToggle');
+        ttsToggle.addEventListener('click', () => {
+            ttsEnabled = !ttsEnabled;
+            ttsToggle.textContent = ttsEnabled ? '🔊 TTS On' : '🔇 TTS Off';
+            ttsToggle.classList.toggle('active', ttsEnabled);
+            
+            if (!ttsEnabled && window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+            }
+        });
+        
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            responses.length = 0;
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🤖</div>
+                    <p>Responses cleared</p>
+                </div>
+            `;
+            updateCount();
+        });
+        
+        function addResponse(text, tone, timestamp) {
+            const time = new Date(timestamp || Date.now()).toLocaleTimeString();
+            responses.push({ text, tone, time });
+            
+            // Remove empty state
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+            
+            const item = document.createElement('div');
+            item.className = 'ai-response';
+            item.innerHTML = `
+                <div class="ai-meta">
+                    <span class="ai-time">${time}</span>
+                    <span class="ai-tone ${tone || ''}">${tone || 'neutral'}</span>
+                </div>
+                <div class="ai-text">${escapeHtml(text)}</div>
+            `;
+            
+            container.appendChild(item);
+            container.scrollTop = container.scrollHeight;
+            
+            updateCount();
+            
+            // Speak if TTS enabled
+            if (ttsEnabled) {
+                speakText(text, item);
+            }
+        }
+        
+        function addVisualHint(hintType, content, position) {
+            // Remove empty state
+            const emptyState = container.querySelector('.empty-state');
+            if (emptyState) emptyState.remove();
+            
+            const item = document.createElement('div');
+            item.className = 'visual-hint';
+            item.innerHTML = `
+                <div class="hint-label">💡 ${hintType}</div>
+                <div class="hint-content">${escapeHtml(content)}</div>
+            `;
+            
+            container.appendChild(item);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function speakText(text, element) {
+            if (!('speechSynthesis' in window)) return;
+            
+            // Cancel any ongoing speech
+            window.speechSynthesis.cancel();
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 1.0;
+            
+            utterance.onstart = () => {
+                if (element) element.classList.add('speaking');
+                updateStatus('speaking', 'Speaking...');
+            };
+            
+            utterance.onend = () => {
+                if (element) element.classList.remove('speaking');
+                updateStatus('connected', 'Connected');
+            };
+            
+            window.speechSynthesis.speak(utterance);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function updateCount() {
+            document.getElementById('responseCount').textContent = 
+                `${responses.length} response${responses.length !== 1 ? 's' : ''}`;
+        }
+        
+        function updateStatus(state, text) {
+            const dot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            dot.className = 'status-dot ' + state;
+            statusText.textContent = text;
+        }
+        
+        // WebSocket
+        function connect() {
+            if (!sessionId) {
+                updateStatus('', 'No session');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}`);
+            
+            ws.onopen = () => updateStatus('connected', 'Connected');
+            ws.onclose = () => {
+                updateStatus('', 'Disconnected');
+                setTimeout(connect, 3000);
+            };
+            ws.onerror = () => updateStatus('', 'Error');
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+        
+        function handleMessage(data) {
+            if (data.type === 'ai_response') {
+                addResponse(data.text, data.tone, data.timestamp);
+            } else if (data.type === 'visual_hint') {
+                addVisualHint(data.hint_type, data.content, data.position);
+            } else if (data.type === 'clear_visual_hint') {
+                // Remove latest visual hint
+                const hints = container.querySelectorAll('.visual-hint');
+                if (hints.length > 0) {
+                    hints[hints.length - 1].remove();
+                }
+            }
+        }
+        
+        // Listen for session changes
+        const channel = new BroadcastChannel('oait_session');
+        channel.onmessage = (event) => {
+            if (event.data.type === 'session_started') {
+                sessionId = event.data.sessionId;
+                connect();
+            } else if (event.data.type === 'session_stopped') {
+                if (ws) ws.close();
+                sessionId = null;
+                updateStatus('', 'Session ended');
+            }
+        };
+        
+        connect();
+    </script>
+</body>
+</html>

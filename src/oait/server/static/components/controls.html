@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAIT - Controls</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        .button-row {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 600;
+            flex: 1;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-success { background: #48bb78; color: white; }
+        .btn-danger { background: #f56565; color: white; }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-secondary { background: #718096; color: white; }
+        
+        .audio-meter {
+            height: 20px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        
+        .audio-level {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #48bb78, #f6e05e, #f56565);
+            transition: width 0.1s;
+        }
+        
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #a0aec0;
+        }
+        
+        .status-dot.active { background: #48bb78; }
+        .status-dot.recording { background: #f56565; animation: pulse 0.5s infinite; }
+        .status-dot.connected { background: #667eea; }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+        
+        .status-text {
+            font-size: 13px;
+            color: #4a5568;
+        }
+        
+        .spacer { flex: 1; }
+        
+        .session-info {
+            margin-top: auto;
+            padding-top: 15px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 12px;
+            color: #718096;
+        }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <h2>🎛️ Session Controls</h2>
+        
+        <div class="control-group">
+            <label>🎤 Microphone</label>
+            <div class="button-row">
+                <button id="startAudio" class="btn-success">Start Recording</button>
+                <button id="stopAudio" class="btn-danger" disabled>Stop Recording</button>
+            </div>
+            <div class="audio-meter">
+                <div id="audioLevel" class="audio-level"></div>
+            </div>
+            <div class="status-row">
+                <div id="audioStatusDot" class="status-dot"></div>
+                <span id="audioStatus" class="status-text">Microphone off</span>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>🔊 Text-to-Speech</label>
+            <div class="button-row">
+                <button id="testTTS" class="btn-primary">Test TTS</button>
+                <button id="stopTTS" class="btn-secondary">Stop Speaking</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>📡 Connection</label>
+            <div class="status-row">
+                <div id="wsStatusDot" class="status-dot"></div>
+                <span id="wsStatus" class="status-text">Connecting...</span>
+            </div>
+        </div>
+        
+        <div class="spacer"></div>
+        
+        <div class="session-info">
+            <strong>Session:</strong> <span id="sessionIdDisplay">Not connected</span>
+        </div>
+    </div>
+    
+    <script>
+        // Get session from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        let sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            const saved = localStorage.getItem('oait_session');
+            if (saved) {
+                const data = JSON.parse(saved);
+                sessionId = data.sessionId;
+            }
+        }
+        
+        if (sessionId) {
+            document.getElementById('sessionIdDisplay').textContent = sessionId.substring(0, 8) + '...';
+        }
+        
+        let ws = null;
+        let audioContext = null;
+        let mediaStream = null;
+        let isRecording = false;
+        let analyser = null;
+        let dataArray = null;
+        
+        // Audio buffer for VAD
+        const audioBuffer = {
+            segments: [],
+            currentSegment: [],
+            speechStartTime: null,
+            maxDuration: 30000
+        };
+        
+        // VAD settings
+        const SILENCE_THRESHOLD = 0.02;
+        const SILENCE_DURATION = 1500;
+        let lastSpeechTime = 0;
+        let isSpeaking = false;
+        
+        document.getElementById('startAudio').addEventListener('click', startAudio);
+        document.getElementById('stopAudio').addEventListener('click', stopAudio);
+        document.getElementById('testTTS').addEventListener('click', testTTS);
+        document.getElementById('stopTTS').addEventListener('click', () => window.speechSynthesis.cancel());
+        
+        async function startAudio() {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new AudioContext({ sampleRate: 16000 });
+                
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+                source.connect(analyser);
+                
+                // Set up audio processing
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                
+                processor.onaudioprocess = (e) => {
+                    if (!isRecording) return;
+                    
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    const rms = calculateRMS(inputData);
+                    
+                    // Update visual meter
+                    const level = Math.min(100, rms * 500);
+                    document.getElementById('audioLevel').style.width = level + '%';
+                    
+                    // VAD logic
+                    if (rms > SILENCE_THRESHOLD) {
+                        if (!isSpeaking) {
+                            isSpeaking = true;
+                            audioBuffer.speechStartTime = Date.now();
+                            audioBuffer.currentSegment = [];
+                            updateAudioStatus('recording', 'Speaking...');
+                        }
+                        lastSpeechTime = Date.now();
+                        audioBuffer.currentSegment.push(...inputData);
+                    } else if (isSpeaking && (Date.now() - lastSpeechTime) > SILENCE_DURATION) {
+                        // End of speech segment
+                        if (audioBuffer.currentSegment.length > 0) {
+                            saveAudioSegment();
+                        }
+                        isSpeaking = false;
+                        updateAudioStatus('active', 'Listening...');
+                    }
+                };
+                
+                isRecording = true;
+                document.getElementById('startAudio').disabled = true;
+                document.getElementById('stopAudio').disabled = false;
+                updateAudioStatus('active', 'Listening...');
+                
+            } catch (err) {
+                console.error('Error starting audio:', err);
+                alert('Failed to start microphone: ' + err.message);
+            }
+        }
+        
+        function stopAudio() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+            
+            isRecording = false;
+            isSpeaking = false;
+            document.getElementById('startAudio').disabled = false;
+            document.getElementById('stopAudio').disabled = true;
+            document.getElementById('audioLevel').style.width = '0%';
+            updateAudioStatus('', 'Microphone off');
+        }
+        
+        function calculateRMS(data) {
+            let sum = 0;
+            for (let i = 0; i < data.length; i++) {
+                sum += data[i] * data[i];
+            }
+            return Math.sqrt(sum / data.length);
+        }
+        
+        function saveAudioSegment() {
+            if (audioBuffer.currentSegment.length === 0) return;
+            
+            audioBuffer.segments.push({
+                data: new Float32Array(audioBuffer.currentSegment),
+                timestamp: audioBuffer.speechStartTime
+            });
+            
+            // Trim old segments
+            const now = Date.now();
+            audioBuffer.segments = audioBuffer.segments.filter(
+                s => (now - s.timestamp) < audioBuffer.maxDuration
+            );
+            
+            audioBuffer.currentSegment = [];
+        }
+        
+        function updateAudioStatus(state, text) {
+            const dot = document.getElementById('audioStatusDot');
+            const status = document.getElementById('audioStatus');
+            
+            dot.className = 'status-dot ' + state;
+            status.textContent = text;
+        }
+        
+        function updateWsStatus(connected) {
+            const dot = document.getElementById('wsStatusDot');
+            const status = document.getElementById('wsStatus');
+            
+            dot.className = 'status-dot ' + (connected ? 'connected' : '');
+            status.textContent = connected ? 'Connected' : 'Disconnected';
+        }
+        
+        function testTTS() {
+            const utterance = new SpeechSynthesisUtterance("Hello! I'm your AI tutor. How can I help you today?");
+            utterance.rate = 0.9;
+            window.speechSynthesis.speak(utterance);
+        }
+        
+        // WebSocket
+        function connect() {
+            if (!sessionId) {
+                updateWsStatus(false);
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}`);
+            
+            ws.onopen = () => updateWsStatus(true);
+            ws.onclose = () => {
+                updateWsStatus(false);
+                setTimeout(connect, 3000);
+            };
+            ws.onerror = () => updateWsStatus(false);
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+        
+        function handleMessage(data) {
+            if (data.type === 'request' && data.resource === 'audio') {
+                sendAudioData(data.request_id);
+            } else if (data.type === 'request' && data.resource === 'status') {
+                sendStatus(data.request_id);
+            }
+        }
+        
+        function sendAudioData(requestId) {
+            // Combine all buffered segments
+            let totalLength = 0;
+            audioBuffer.segments.forEach(s => totalLength += s.data.length);
+            
+            if (totalLength === 0) {
+                ws.send(JSON.stringify({
+                    type: 'response',
+                    request_id: requestId,
+                    resource: 'audio',
+                    has_speech: false
+                }));
+                return;
+            }
+            
+            // Merge segments
+            const merged = new Float32Array(totalLength);
+            let offset = 0;
+            audioBuffer.segments.forEach(s => {
+                merged.set(s.data, offset);
+                offset += s.data.length;
+            });
+            
+            // Convert to WAV
+            const wavBlob = float32ToWav(merged, 16000);
+            const reader = new FileReader();
+            reader.onload = () => {
+                const base64 = reader.result.split(',')[1];
+                ws.send(JSON.stringify({
+                    type: 'response',
+                    request_id: requestId,
+                    resource: 'audio',
+                    has_speech: true,
+                    data: base64,
+                    duration_ms: (totalLength / 16000) * 1000
+                }));
+                
+                // Clear buffer after sending
+                audioBuffer.segments = [];
+            };
+            reader.readAsDataURL(wavBlob);
+        }
+        
+        function sendStatus(requestId) {
+            ws.send(JSON.stringify({
+                type: 'response',
+                request_id: requestId,
+                resource: 'status',
+                data: {
+                    audio_recording: isRecording,
+                    audio_segments: audioBuffer.segments.length,
+                    is_speaking: isSpeaking
+                }
+            }));
+        }
+        
+        function float32ToWav(samples, sampleRate) {
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+            
+            const writeString = (offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+            
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);
+            view.setUint16(22, 1, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            writeString(36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+            
+            for (let i = 0; i < samples.length; i++) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+            
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+        
+        // Listen for session changes
+        const channel = new BroadcastChannel('oait_session');
+        channel.onmessage = (event) => {
+            if (event.data.type === 'session_started') {
+                sessionId = event.data.sessionId;
+                document.getElementById('sessionIdDisplay').textContent = sessionId.substring(0, 8) + '...';
+                connect();
+            } else if (event.data.type === 'session_stopped') {
+                if (ws) ws.close();
+                stopAudio();
+                sessionId = null;
+                document.getElementById('sessionIdDisplay').textContent = 'Not connected';
+            }
+        };
+        
+        connect();
+    </script>
+</body>
+</html>

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAIT - Launcher</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 { color: #667eea; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        
+        .session-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        input {
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            flex: 1;
+            min-width: 200px;
+            font-size: 16px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .btn-primary { background: #667eea; color: white; }
+        .btn-danger { background: #f56565; color: white; }
+        
+        .status {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            font-weight: 500;
+        }
+        
+        .status.connected { background: #c6f6d5; color: #22543d; }
+        .status.disconnected { background: #fed7d7; color: #742a2a; }
+        
+        .components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .component-card {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        
+        .component-card:hover {
+            border-color: #667eea;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2);
+        }
+        
+        .component-card.open {
+            border-color: #48bb78;
+            background: #f0fff4;
+        }
+        
+        .component-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        .component-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+        
+        .component-desc {
+            font-size: 12px;
+            color: #718096;
+        }
+        
+        .open-all-btn {
+            margin-top: 20px;
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            font-size: 18px;
+        }
+        
+        .instructions {
+            margin-top: 30px;
+            padding: 20px;
+            background: #ebf8ff;
+            border-radius: 12px;
+            border-left: 4px solid #3182ce;
+        }
+        
+        .instructions h3 {
+            color: #2c5282;
+            margin-bottom: 10px;
+        }
+        
+        .instructions p {
+            color: #2a4365;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 OAIT - Launcher</h1>
+        <p class="subtitle">Open components in separate windows for flexible arrangement</p>
+        
+        <div class="session-controls">
+            <input type="text" id="studentId" placeholder="Student ID" value="student1">
+            <button id="startSession" class="btn-primary">Start Session</button>
+            <button id="stopSession" class="btn-danger" disabled>Stop Session</button>
+        </div>
+        
+        <div id="status" class="status disconnected">
+            ⚫ Not Connected - Start a session first
+        </div>
+        
+        <div class="components">
+            <div class="component-card" data-component="whiteboard" onclick="openComponent('whiteboard')">
+                <div class="component-icon">📝</div>
+                <div class="component-name">Whiteboard</div>
+                <div class="component-desc">Drawing canvas for student work</div>
+            </div>
+            
+            <div class="component-card" data-component="camera" onclick="openComponent('camera')">
+                <div class="component-icon">📷</div>
+                <div class="component-name">Camera</div>
+                <div class="component-desc">Self camera view</div>
+            </div>
+            
+            <div class="component-card" data-component="transcript" onclick="openComponent('transcript')">
+                <div class="component-icon">💬</div>
+                <div class="component-name">Transcript</div>
+                <div class="component-desc">Speech transcripts</div>
+            </div>
+            
+            <div class="component-card" data-component="ai" onclick="openComponent('ai')">
+                <div class="component-icon">🤖</div>
+                <div class="component-name">AI Responses</div>
+                <div class="component-desc">Tutor feedback & hints</div>
+            </div>
+            
+            <div class="component-card" data-component="debug" onclick="openComponent('debug')">
+                <div class="component-icon">🔧</div>
+                <div class="component-name">Debug</div>
+                <div class="component-desc">System logs & status</div>
+            </div>
+            
+            <div class="component-card" data-component="controls" onclick="openComponent('controls')">
+                <div class="component-icon">🎛️</div>
+                <div class="component-name">Controls</div>
+                <div class="component-desc">Audio & session controls</div>
+            </div>
+        </div>
+        
+        <button class="open-all-btn" onclick="openAll()">🚀 Open All Components</button>
+        
+        <div class="instructions">
+            <h3>💡 How to use</h3>
+            <p>
+                1. Enter a Student ID and click "Start Session"<br>
+                2. Click on components to open them in separate windows/tabs<br>
+                3. Arrange windows using your OS window manager (Snap, split screen, etc.)<br>
+                4. Each window shares the same session and communicates in real-time<br>
+                5. Use browser bookmarks to save your preferred window arrangement
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        let sessionId = null;
+        const openWindows = {};
+        
+        // Load session from localStorage
+        const savedSession = localStorage.getItem('oait_session');
+        if (savedSession) {
+            const session = JSON.parse(savedSession);
+            sessionId = session.sessionId;
+            document.getElementById('studentId').value = session.studentId || 'student1';
+            updateStatus(true);
+        }
+        
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            const startBtn = document.getElementById('startSession');
+            const stopBtn = document.getElementById('stopSession');
+            
+            if (connected && sessionId) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = `🟢 Connected - Session: ${sessionId.substring(0, 8)}...`;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = '⚫ Not Connected - Start a session first';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+            }
+        }
+        
+        document.getElementById('startSession').addEventListener('click', async () => {
+            const studentId = document.getElementById('studentId').value || 'student1';
+            
+            try {
+                const response = await fetch(`/session/start?student_id=${encodeURIComponent(studentId)}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                sessionId = data.session_id;
+                
+                // Save to localStorage so components can access it
+                localStorage.setItem('oait_session', JSON.stringify({
+                    sessionId: sessionId,
+                    studentId: studentId
+                }));
+                
+                updateStatus(true);
+                
+                // Notify open windows
+                broadcastToWindows({ type: 'session_started', sessionId, studentId });
+                
+            } catch (error) {
+                console.error('Error starting session:', error);
+                alert('Failed to start session: ' + error.message);
+            }
+        });
+        
+        document.getElementById('stopSession').addEventListener('click', async () => {
+            if (!sessionId) return;
+            
+            try {
+                await fetch(`/session/${sessionId}/stop`, { method: 'POST' });
+                
+                // Clear localStorage
+                localStorage.removeItem('oait_session');
+                
+                // Notify open windows
+                broadcastToWindows({ type: 'session_stopped' });
+                
+                sessionId = null;
+                updateStatus(false);
+                
+            } catch (error) {
+                console.error('Error stopping session:', error);
+            }
+        });
+        
+        function openComponent(component) {
+            if (!sessionId) {
+                alert('Please start a session first');
+                return;
+            }
+            
+            const url = `/component/${component}?session=${sessionId}`;
+            const windowName = `oait_${component}`;
+            
+            // Window sizes for different components
+            const sizes = {
+                whiteboard: 'width=800,height=600',
+                camera: 'width=400,height=350',
+                transcript: 'width=400,height=500',
+                ai: 'width=500,height=400',
+                debug: 'width=600,height=400',
+                controls: 'width=400,height=300',
+            };
+            
+            const win = window.open(url, windowName, sizes[component] || 'width=600,height=400');
+            openWindows[component] = win;
+            
+            // Mark card as open
+            document.querySelector(`[data-component="${component}"]`).classList.add('open');
+        }
+        
+        function openAll() {
+            if (!sessionId) {
+                alert('Please start a session first');
+                return;
+            }
+            
+            const components = ['whiteboard', 'camera', 'transcript', 'ai', 'debug', 'controls'];
+            let x = 50, y = 50;
+            
+            components.forEach((comp, i) => {
+                setTimeout(() => {
+                    openComponent(comp);
+                }, i * 200);  // Stagger window opening
+            });
+        }
+        
+        function broadcastToWindows(message) {
+            // Use BroadcastChannel for cross-window communication
+            const channel = new BroadcastChannel('oait_session');
+            channel.postMessage(message);
+            channel.close();
+        }
+        
+        // Listen for window close events
+        window.addEventListener('beforeunload', () => {
+            // Close all component windows when launcher closes
+            Object.values(openWindows).forEach(win => {
+                if (win && !win.closed) {
+                    win.close();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

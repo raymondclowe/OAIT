@@ -121,9 +121,31 @@ async def shutdown_event() -> None:
 
 @app.get("/")
 async def root() -> FileResponse:
-    """Serve the main HTML page."""
+    """Serve the main HTML page (original all-in-one UI)."""
     static_dir = Path(__file__).parent / "static"
     return FileResponse(static_dir / "index.html")
+
+
+@app.get("/launcher")
+async def launcher() -> FileResponse:
+    """Serve the launcher page for multi-window setup."""
+    static_dir = Path(__file__).parent / "static"
+    return FileResponse(static_dir / "launcher.html")
+
+
+@app.get("/component/{component_name}")
+async def component(component_name: str) -> FileResponse:
+    """Serve individual component pages.
+    
+    Available components: whiteboard, camera, transcript, ai, debug, controls
+    """
+    static_dir = Path(__file__).parent / "static" / "components"
+    component_file = static_dir / f"{component_name}.html"
+    
+    if not component_file.exists():
+        raise HTTPException(status_code=404, detail=f"Component '{component_name}' not found")
+    
+    return FileResponse(component_file)
 
 
 @app.get("/health")

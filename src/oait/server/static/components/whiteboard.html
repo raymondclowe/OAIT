@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAIT - Whiteboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f7fafc;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: white;
+            padding: 10px 15px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .tools {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .tools button {
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .tools button:hover {
+            background: #f7fafc;
+            border-color: #667eea;
+        }
+        
+        .tools button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .color-picker {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .color-swatch:hover, .color-swatch.active {
+            border-color: #2d3748;
+            transform: scale(1.1);
+        }
+        
+        .canvas-container {
+            flex: 1;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #whiteboard {
+            background: white;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            cursor: crosshair;
+        }
+        
+        .status-bar {
+            background: white;
+            padding: 8px 15px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 12px;
+            color: #718096;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #a0aec0;
+        }
+        
+        .status-dot.connected { background: #48bb78; }
+        .status-dot.syncing { background: #f6e05e; animation: pulse 1s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="title">📝 Whiteboard</span>
+        <div class="tools">
+            <button id="penTool" class="active">✏️ Pen</button>
+            <button id="eraserTool">🧹 Eraser</button>
+            <button id="clearBtn">🗑️ Clear</button>
+            <div class="color-picker">
+                <div class="color-swatch active" style="background: #2d3748" data-color="#2d3748"></div>
+                <div class="color-swatch" style="background: #e53e3e" data-color="#e53e3e"></div>
+                <div class="color-swatch" style="background: #3182ce" data-color="#3182ce"></div>
+                <div class="color-swatch" style="background: #38a169" data-color="#38a169"></div>
+                <div class="color-swatch" style="background: #d69e2e" data-color="#d69e2e"></div>
+            </div>
+            <select id="brushSize" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #e2e8f0;">
+                <option value="2">Thin</option>
+                <option value="4" selected>Medium</option>
+                <option value="8">Thick</option>
+                <option value="16">Bold</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="canvas-container">
+        <canvas id="whiteboard"></canvas>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+        <span id="lastSync">Last sync: Never</span>
+    </div>
+    
+    <script>
+        // Get session from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        let sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            const saved = localStorage.getItem('oait_session');
+            if (saved) {
+                sessionId = JSON.parse(saved).sessionId;
+            }
+        }
+        
+        // WebSocket connection
+        let ws = null;
+        let isConnected = false;
+        
+        // Canvas setup
+        const canvas = document.getElementById('whiteboard');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            const container = document.querySelector('.canvas-container');
+            canvas.width = container.clientWidth - 20;
+            canvas.height = container.clientHeight - 20;
+        }
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Drawing state
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentColor = '#2d3748';
+        let brushSize = 4;
+        let isEraser = false;
+        let hasChanges = false;
+        let lastChangeTime = null;
+        
+        // Tool selection
+        document.getElementById('penTool').addEventListener('click', () => {
+            isEraser = false;
+            document.getElementById('penTool').classList.add('active');
+            document.getElementById('eraserTool').classList.remove('active');
+            canvas.style.cursor = 'crosshair';
+        });
+        
+        document.getElementById('eraserTool').addEventListener('click', () => {
+            isEraser = true;
+            document.getElementById('eraserTool').classList.add('active');
+            document.getElementById('penTool').classList.remove('active');
+            canvas.style.cursor = 'grab';
+        });
+        
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            hasChanges = true;
+            lastChangeTime = Date.now();
+        });
+        
+        document.querySelectorAll('.color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+                swatch.classList.add('active');
+                currentColor = swatch.dataset.color;
+            });
+        });
+        
+        document.getElementById('brushSize').addEventListener('change', (e) => {
+            brushSize = parseInt(e.target.value);
+        });
+        
+        // Drawing handlers
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(e.offsetX, e.offsetY);
+            
+            if (isEraser) {
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
+                ctx.lineWidth = brushSize * 4;
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.strokeStyle = currentColor;
+                ctx.lineWidth = brushSize;
+            }
+            
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+            
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+            hasChanges = true;
+            lastChangeTime = Date.now();
+        });
+        
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mouseout', () => isDrawing = false);
+        
+        // Touch support
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            isDrawing = true;
+            [lastX, lastY] = [touch.clientX - rect.left, touch.clientY - rect.top];
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDrawing) return;
+            
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.strokeStyle = isEraser ? 'white' : currentColor;
+            ctx.lineWidth = brushSize;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            
+            [lastX, lastY] = [x, y];
+            hasChanges = true;
+            lastChangeTime = Date.now();
+        });
+        
+        canvas.addEventListener('touchend', () => isDrawing = false);
+        
+        // WebSocket connection
+        function connect() {
+            if (!sessionId) {
+                updateStatus('disconnected', 'No session - open from launcher');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}`);
+            
+            ws.onopen = () => {
+                isConnected = true;
+                updateStatus('connected', 'Connected');
+            };
+            
+            ws.onclose = () => {
+                isConnected = false;
+                updateStatus('disconnected', 'Disconnected');
+                setTimeout(connect, 3000);
+            };
+            
+            ws.onerror = () => {
+                updateStatus('disconnected', 'Connection error');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+        
+        function handleMessage(data) {
+            if (data.type === 'request' && data.resource === 'whiteboard') {
+                // Server requesting whiteboard data
+                sendWhiteboardData(data.request_id);
+            } else if (data.type === 'whiteboard_draw') {
+                // AI drawing on whiteboard
+                drawAIContent(data);
+            }
+        }
+        
+        function sendWhiteboardData(requestId) {
+            updateStatus('syncing', 'Syncing...');
+            
+            const imageData = canvas.toDataURL('image/png').split(',')[1];
+            
+            ws.send(JSON.stringify({
+                type: 'response',
+                request_id: requestId,
+                resource: 'whiteboard',
+                data: imageData,
+                has_changes: hasChanges,
+                last_change: lastChangeTime
+            }));
+            
+            hasChanges = false;
+            document.getElementById('lastSync').textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+            
+            setTimeout(() => updateStatus('connected', 'Connected'), 500);
+        }
+        
+        function drawAIContent(data) {
+            // AI drawing tools - highlight, arrow, circle, text
+            ctx.save();
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.strokeStyle = data.color || 'blue';
+            ctx.fillStyle = data.color || 'blue';
+            ctx.lineWidth = 3;
+            
+            const pos = data.position || { x: 50, y: 50 };
+            const x = (pos.x / 100) * canvas.width;
+            const y = (pos.y / 100) * canvas.height;
+            
+            switch (data.action) {
+                case 'circle_area':
+                    ctx.beginPath();
+                    ctx.arc(x, y, 40, 0, Math.PI * 2);
+                    ctx.stroke();
+                    break;
+                case 'draw_arrow':
+                    // Draw arrow pointing to position
+                    ctx.beginPath();
+                    ctx.moveTo(x - 50, y - 50);
+                    ctx.lineTo(x - 10, y - 10);
+                    ctx.stroke();
+                    // Arrow head
+                    ctx.beginPath();
+                    ctx.moveTo(x - 10, y - 10);
+                    ctx.lineTo(x - 20, y - 10);
+                    ctx.lineTo(x - 10, y - 20);
+                    ctx.fill();
+                    break;
+                case 'write_text':
+                    ctx.font = '16px sans-serif';
+                    ctx.fillText(data.content || '', x, y);
+                    break;
+                case 'highlight':
+                    ctx.globalAlpha = 0.3;
+                    ctx.fillRect(x - 50, y - 10, 100, 20);
+                    break;
+                case 'clear':
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    break;
+            }
+            
+            ctx.restore();
+            hasChanges = true;
+            lastChangeTime = Date.now();
+        }
+        
+        function updateStatus(state, text) {
+            const dot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            
+            dot.className = 'status-dot ' + state;
+            statusText.textContent = text;
+        }
+        
+        // Listen for session changes from launcher
+        const channel = new BroadcastChannel('oait_session');
+        channel.onmessage = (event) => {
+            if (event.data.type === 'session_started') {
+                sessionId = event.data.sessionId;
+                connect();
+            } else if (event.data.type === 'session_stopped') {
+                if (ws) ws.close();
+                sessionId = null;
+                updateStatus('disconnected', 'Session ended');
+            }
+        };
+        
+        // Connect on load
+        connect();
+    </script>
+</body>
+</html>

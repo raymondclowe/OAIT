@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAIT - Camera</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a202c;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #2d3748;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: white;
+        }
+        
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background: #4a5568;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover { background: #667eea; }
+        button.active { background: #48bb78; }
+        
+        .video-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+        }
+        
+        #video {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 8px;
+            background: #2d3748;
+        }
+        
+        .placeholder {
+            color: #a0aec0;
+            text-align: center;
+        }
+        
+        .placeholder-icon {
+            font-size: 64px;
+            margin-bottom: 15px;
+        }
+        
+        .status-bar {
+            background: #2d3748;
+            padding: 8px 15px;
+            font-size: 12px;
+            color: #a0aec0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #a0aec0;
+        }
+        
+        .status-dot.active { background: #48bb78; }
+        .status-dot.connected { background: #667eea; }
+        
+        select {
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: none;
+            background: #4a5568;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="title">📷 Camera</span>
+        <div class="controls">
+            <button id="startCamera">Start Camera</button>
+            <button id="stopCamera" disabled>Stop Camera</button>
+            <select id="cameraSelect">
+                <option value="">Select Camera</option>
+            </select>
+        </div>
+    </div>
+    
+    <div class="video-container">
+        <div id="placeholder" class="placeholder">
+            <div class="placeholder-icon">📷</div>
+            <p>Click "Start Camera" to begin</p>
+        </div>
+        <video id="video" autoplay playsinline style="display: none;"></video>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div id="cameraStatusDot" class="status-dot"></div>
+            <span id="cameraStatus">Camera off</span>
+        </div>
+        <div class="status-indicator">
+            <div id="wsStatusDot" class="status-dot"></div>
+            <span id="wsStatus">Connecting...</span>
+        </div>
+    </div>
+    
+    <script>
+        // Get session from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        let sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            const saved = localStorage.getItem('oait_session');
+            if (saved) {
+                sessionId = JSON.parse(saved).sessionId;
+            }
+        }
+        
+        let ws = null;
+        let mediaStream = null;
+        const video = document.getElementById('video');
+        const placeholder = document.getElementById('placeholder');
+        const cameraSelect = document.getElementById('cameraSelect');
+        
+        // Enumerate cameras
+        async function listCameras() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(d => d.kind === 'videoinput');
+                
+                cameraSelect.innerHTML = '<option value="">Select Camera</option>';
+                cameras.forEach((cam, i) => {
+                    const option = document.createElement('option');
+                    option.value = cam.deviceId;
+                    option.textContent = cam.label || `Camera ${i + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Error listing cameras:', err);
+            }
+        }
+        
+        document.getElementById('startCamera').addEventListener('click', startCamera);
+        document.getElementById('stopCamera').addEventListener('click', stopCamera);
+        cameraSelect.addEventListener('change', () => {
+            if (mediaStream) {
+                stopCamera();
+                startCamera();
+            }
+        });
+        
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: cameraSelect.value ? { deviceId: cameraSelect.value } : true
+                };
+                
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = mediaStream;
+                video.style.display = 'block';
+                placeholder.style.display = 'none';
+                
+                document.getElementById('startCamera').disabled = true;
+                document.getElementById('stopCamera').disabled = false;
+                
+                updateCameraStatus(true);
+                
+                // Re-list cameras (now we have permissions, labels will be available)
+                listCameras();
+                
+            } catch (err) {
+                console.error('Error starting camera:', err);
+                alert('Failed to start camera: ' + err.message);
+            }
+        }
+        
+        function stopCamera() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            
+            video.style.display = 'none';
+            placeholder.style.display = 'block';
+            
+            document.getElementById('startCamera').disabled = false;
+            document.getElementById('stopCamera').disabled = true;
+            
+            updateCameraStatus(false);
+        }
+        
+        function updateCameraStatus(active) {
+            const dot = document.getElementById('cameraStatusDot');
+            const status = document.getElementById('cameraStatus');
+            
+            if (active) {
+                dot.className = 'status-dot active';
+                status.textContent = 'Camera active';
+            } else {
+                dot.className = 'status-dot';
+                status.textContent = 'Camera off';
+            }
+        }
+        
+        function updateWsStatus(connected) {
+            const dot = document.getElementById('wsStatusDot');
+            const status = document.getElementById('wsStatus');
+            
+            if (connected) {
+                dot.className = 'status-dot connected';
+                status.textContent = 'Connected';
+            } else {
+                dot.className = 'status-dot';
+                status.textContent = 'Disconnected';
+            }
+        }
+        
+        // WebSocket connection
+        function connect() {
+            if (!sessionId) {
+                updateWsStatus(false);
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}`);
+            
+            ws.onopen = () => updateWsStatus(true);
+            ws.onclose = () => {
+                updateWsStatus(false);
+                setTimeout(connect, 3000);
+            };
+            ws.onerror = () => updateWsStatus(false);
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+        
+        function handleMessage(data) {
+            if (data.type === 'request' && data.resource === 'camera') {
+                sendCameraFrame(data.request_id, data.camera_id);
+            }
+        }
+        
+        function sendCameraFrame(requestId, cameraId) {
+            if (!mediaStream) {
+                ws.send(JSON.stringify({
+                    type: 'response',
+                    request_id: requestId,
+                    resource: 'camera',
+                    available: false,
+                    error: 'Camera not started'
+                }));
+                return;
+            }
+            
+            // Capture frame from video
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+            
+            ws.send(JSON.stringify({
+                type: 'response',
+                request_id: requestId,
+                resource: 'camera',
+                available: true,
+                data: imageData,
+                camera_id: cameraId || 'student_face',
+                width: video.videoWidth,
+                height: video.videoHeight
+            }));
+        }
+        
+        // Listen for session changes
+        const channel = new BroadcastChannel('oait_session');
+        channel.onmessage = (event) => {
+            if (event.data.type === 'session_started') {
+                sessionId = event.data.sessionId;
+                connect();
+            } else if (event.data.type === 'session_stopped') {
+                if (ws) ws.close();
+                sessionId = null;
+                updateWsStatus(false);
+            }
+        };
+        
+        // Initialize
+        listCameras();
+        connect();
+    </script>
+</body>
+</html>

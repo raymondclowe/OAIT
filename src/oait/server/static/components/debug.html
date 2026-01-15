@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAIT - Debug</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #1a202c;
+            color: #a0aec0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #2d3748;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #68d391;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        button {
+            padding: 4px 10px;
+            border: 1px solid #4a5568;
+            border-radius: 4px;
+            background: #2d3748;
+            color: #a0aec0;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
+        }
+        
+        button:hover { background: #4a5568; }
+        button.active { background: #38a169; color: white; border-color: #38a169; }
+        
+        .log-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        
+        .log-entry {
+            padding: 4px 8px;
+            border-radius: 3px;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+        
+        .log-entry:hover {
+            background: #2d3748;
+        }
+        
+        .log-time {
+            color: #718096;
+            margin-right: 10px;
+        }
+        
+        .log-type {
+            font-weight: 600;
+            margin-right: 8px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+        }
+        
+        .log-type.info { background: #3182ce; color: white; }
+        .log-type.debug { background: #718096; color: white; }
+        .log-type.warn { background: #d69e2e; color: white; }
+        .log-type.error { background: #e53e3e; color: white; }
+        .log-type.tool { background: #805ad5; color: white; }
+        .log-type.ooda { background: #38a169; color: white; }
+        
+        .log-message { color: #e2e8f0; }
+        
+        .status-bar {
+            background: #2d3748;
+            padding: 6px 15px;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #718096;
+        }
+        
+        .status-dot.connected { background: #48bb78; }
+        
+        .filter-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .filter-btn {
+            padding: 2px 6px;
+            font-size: 10px;
+        }
+        
+        .filter-btn.inactive {
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="title">🔧 Debug Log</span>
+        <div class="controls">
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn active" data-filter="info">Info</button>
+                <button class="filter-btn active" data-filter="tool">Tool</button>
+                <button class="filter-btn active" data-filter="ooda">OODA</button>
+                <button class="filter-btn active" data-filter="error">Error</button>
+            </div>
+            <button id="autoScrollBtn" class="active">⬇️ Auto-scroll</button>
+            <button id="clearBtn">Clear</button>
+        </div>
+    </div>
+    
+    <div id="logContainer" class="log-container">
+        <div class="log-entry">
+            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+            <span class="log-type info">INFO</span>
+            <span class="log-message">Debug panel initialized</span>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div id="statusDot" class="status-dot"></div>
+            <span id="statusText">Connecting...</span>
+        </div>
+        <span id="logCount">1 entry</span>
+    </div>
+    
+    <script>
+        // Get session from URL or localStorage
+        const urlParams = new URLSearchParams(window.location.search);
+        let sessionId = urlParams.get('session');
+        
+        if (!sessionId) {
+            const saved = localStorage.getItem('oait_session');
+            if (saved) {
+                sessionId = JSON.parse(saved).sessionId;
+            }
+        }
+        
+        let ws = null;
+        let autoScroll = true;
+        const logs = [];
+        const container = document.getElementById('logContainer');
+        const filters = { all: true, info: true, tool: true, ooda: true, error: true, debug: true, warn: true };
+        
+        // Auto-scroll toggle
+        document.getElementById('autoScrollBtn').addEventListener('click', (e) => {
+            autoScroll = !autoScroll;
+            e.target.classList.toggle('active', autoScroll);
+        });
+        
+        // Clear logs
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            logs.length = 0;
+            container.innerHTML = '';
+            addLog('info', 'Logs cleared');
+        });
+        
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.dataset.filter;
+                
+                if (filter === 'all') {
+                    const allActive = btn.classList.contains('active');
+                    document.querySelectorAll('.filter-btn').forEach(b => {
+                        b.classList.toggle('active', !allActive);
+                        filters[b.dataset.filter] = !allActive;
+                    });
+                } else {
+                    btn.classList.toggle('active');
+                    filters[filter] = btn.classList.contains('active');
+                }
+                
+                updateVisibility();
+            });
+        });
+        
+        function updateVisibility() {
+            container.querySelectorAll('.log-entry').forEach(entry => {
+                const type = entry.dataset.type || 'info';
+                entry.style.display = filters[type] ? '' : 'none';
+            });
+        }
+        
+        function addLog(type, message, timestamp) {
+            const time = timestamp ? new Date(timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString();
+            logs.push({ type, message, time });
+            
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.dataset.type = type;
+            entry.style.display = filters[type] ? '' : 'none';
+            
+            entry.innerHTML = `
+                <span class="log-time">${time}</span>
+                <span class="log-type ${type}">${type.toUpperCase()}</span>
+                <span class="log-message">${escapeHtml(message)}</span>
+            `;
+            
+            container.appendChild(entry);
+            
+            if (autoScroll) {
+                container.scrollTop = container.scrollHeight;
+            }
+            
+            updateCount();
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function updateCount() {
+            document.getElementById('logCount').textContent = 
+                `${logs.length} ${logs.length === 1 ? 'entry' : 'entries'}`;
+        }
+        
+        function updateStatus(connected) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            
+            dot.className = 'status-dot ' + (connected ? 'connected' : '');
+            text.textContent = connected ? 'Connected' : 'Disconnected';
+        }
+        
+        // Classify debug messages
+        function classifyMessage(message) {
+            if (message.includes('[TOOL]') || message.includes('tool')) return 'tool';
+            if (message.includes('[OODA]') || message.includes('OODA')) return 'ooda';
+            if (message.includes('error') || message.includes('Error')) return 'error';
+            if (message.includes('warn') || message.includes('Warning')) return 'warn';
+            return 'info';
+        }
+        
+        // WebSocket
+        function connect() {
+            if (!sessionId) {
+                updateStatus(false);
+                addLog('warn', 'No session - open from launcher');
+                return;
+            }
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/${sessionId}`);
+            
+            ws.onopen = () => {
+                updateStatus(true);
+                addLog('info', 'WebSocket connected');
+            };
+            
+            ws.onclose = () => {
+                updateStatus(false);
+                addLog('warn', 'WebSocket disconnected, reconnecting...');
+                setTimeout(connect, 3000);
+            };
+            
+            ws.onerror = () => {
+                addLog('error', 'WebSocket error');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleMessage(data);
+            };
+        }
+        
+        function handleMessage(data) {
+            if (data.type === 'debug') {
+                const type = classifyMessage(data.message);
+                addLog(type, data.message, data.timestamp);
+            } else {
+                // Log all other messages as debug
+                addLog('debug', `[${data.type}] ${JSON.stringify(data).substring(0, 200)}`);
+            }
+        }
+        
+        // Listen for session changes
+        const channel = new BroadcastChannel('oait_session');
+        channel.onmessage = (event) => {
+            if (event.data.type === 'session_started') {
+                sessionId = event.data.sessionId;
+                addLog('info', `Session started: ${sessionId.substring(0, 8)}...`);
+                connect();
+            } else if (event.data.type === 'session_stopped') {
+                if (ws) ws.close();
+                sessionId = null;
+                addLog('info', 'Session stopped');
+            }
+        };
+        
+        connect();
+    </script>
+</body>
+</html>
