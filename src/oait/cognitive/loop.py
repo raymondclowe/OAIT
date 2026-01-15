@@ -84,6 +84,7 @@ Session State:
 
 Analyze the situation and decide what to do."""
 
+        # Note: In production, sanitize observation data to prevent prompt injection
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},

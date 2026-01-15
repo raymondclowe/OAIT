@@ -2,9 +2,8 @@
 
 import logging
 import asyncio
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict
 from collections import deque
-from collections.abc import Deque
 import numpy as np
 from datetime import datetime
 
@@ -73,7 +72,7 @@ class TranscriptBuffer:
             duration: Duration of the sliding window in seconds
         """
         self.duration = duration
-        self.buffer: Deque = deque()
+        self.buffer: deque[Dict] = deque()
 
     def append(self, text: str, timestamp: Optional[float] = None) -> None:
         """Add a transcript to the buffer.
