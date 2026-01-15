@@ -48,11 +48,15 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
 
 ### Architecture Constraints
 
-> ⚠️ **CRITICAL CONSTRAINTS**:
-> - OpenAI/Anthropic APIs are geo-blocked - use **OpenRouter.ai** for all LLM calls
-> - Prefer **Gemini 3 Pro** via OpenRouter (supports images + tools)
-> - MVP uses local/free services where possible (Whisper STT, Web Speech TTS)
-> - Server runs on household LAN (Ubuntu/Windows), clients access via browser
+> ⚠️ **CRITICAL CONSTRAINTS - LOCAL-FIRST**:
+> - **ONLY CLOUD SERVICE**: OpenRouter.ai for Gemini 3 Pro (deep thinking/image analysis)
+> - **ALL OTHER PROCESSING**: Local or on-premises (building subnet)
+> - **STT**: Faster-Whisper running locally on self-hosted server
+> - **TTS**: Web Speech API (browser-native, no cloud)
+> - **Storage**: SQLite database on local server
+> - **Whiteboard**: Excalidraw (runs in browser)
+> - **Client Apps**: PWA for phone/desktop (local-first)
+> - **NO CLOUD SERVICES**: No Deepgram, ElevenLabs, Cartesia, Pipekit, or other cloud APIs
 
 ### Testing
 - [ ] Verify all directories created
@@ -99,9 +103,10 @@ class TranscriptBuffer:
 ```
 
 ### MVP Notes
-- Using **local Whisper** (faster-whisper) to avoid paid STT services
-- Web Speech API for browser-based TTS (free, no API key needed)
-- Can upgrade to Deepgram post-MVP for lower latency
+- Using **local Faster-Whisper** for all STT (no cloud STT services)
+- Web Speech API for browser-based TTS (browser-native, no cloud TTS)
+- All audio processing happens on self-hosted server within building/subnet
+- GPU recommended for faster Whisper inference on larger models
 
 ### Testing
 - [ ] Unit test: Buffer maintains correct window size
@@ -339,18 +344,20 @@ class ActionRouter:
 
 ### Deliverables
 - [ ] Complete agent implementation
-- [ ] LiveKit room integration
-- [ ] Basic web frontend (optional)
+- [ ] WebSocket/HTTP API integration
+- [ ] PWA web frontend
 - [ ] End-to-end tests
 - [ ] User acceptance testing plan
 
 ### MVP Features
-✅ Audio capture and transcription  
-✅ Video capture and analysis  
-✅ Student model persistence  
+✅ Audio capture and transcription (local Faster-Whisper)  
+✅ Video capture and analysis (Gemini 3 Pro via OpenRouter)  
+✅ Student model persistence (SQLite)  
 ✅ Internal monologue generation  
 ✅ Basic intervention decisions  
-✅ Text-to-speech output  
+✅ Text-to-speech output (Web Speech API)  
+✅ PWA support for phone/desktop  
+✅ Excalidraw whiteboard integration  
 
 ### Testing
 - [ ] E2E test: Complete tutoring session simulation
@@ -395,16 +402,17 @@ class ActionRouter:
 
 ## Phase 9: Advanced Features (Week 13+)
 
-**Goal**: Implement enhancements beyond MVP
+**Goal**: Implement enhancements beyond MVP (still local-first)
 
 ### Potential Features
 - [ ] Multiple student support
 - [ ] Enhanced pedagogy strategies
-- [ ] Session replay and analysis
+- [ ] Session replay and analysis (from SQLite)
 - [ ] Advanced visualization
-- [ ] Integration with learning management systems
+- [ ] Local OSS vision model integration (fallback)
 - [ ] Support for additional subjects
-- [ ] Local-only mode (privacy-focused)
+- [ ] Multi-server scaling (within building subnet)
+- [ ] Enhanced PWA offline capabilities
 
 ---
 
@@ -436,31 +444,35 @@ Each phase follows this testing pyramid:
 
 ### Technical Risks
 - **Latency**: Multimodal AI can be slow
-  - *Mitigation*: Use streaming APIs, optimize polling intervals
+  - *Mitigation*: Use streaming APIs, optimize polling intervals, GPU for Whisper
   
-- **API Costs**: Cloud services can be expensive
-  - *Mitigation*: Implement rate limiting, support local models
+- **API Costs**: OpenRouter calls have costs
+  - *Mitigation*: Implement rate limiting, cache responses, batch requests
   
 - **Model Accuracy**: AI might misunderstand context
   - *Mitigation*: Extensive testing, confidence thresholds
+
+- **Local Hardware**: Server needs sufficient resources
+  - *Mitigation*: Support multiple Whisper model sizes, GPU optional but recommended
 
 ### Product Risks
 - **Over-intervention**: AI interrupts too much
   - *Mitigation*: Conservative thresholds, user feedback loops
   
 - **Privacy Concerns**: Recording students
-  - *Mitigation*: Clear consent, local-first options, data minimization
+  - *Mitigation*: All data stays local (SQLite), no cloud storage, clear consent
 
 ---
 
 ## Success Metrics
 
 ### Technical Metrics
-- Audio-to-text latency < 500ms
-- Vision analysis latency < 2s
+- Audio-to-text latency < 1s (local Faster-Whisper)
+- Vision analysis latency < 3s (OpenRouter call)
 - Decision latency < 500ms
 - False positive rate < 10%
-- System uptime > 99%
+- System uptime > 99% (local server)
+- SQLite query latency < 50ms
 
 ### User Metrics
 - Intervention helpfulness rating > 4/5
@@ -479,24 +491,26 @@ Each phase follows this testing pyramid:
 ## Dependencies and Prerequisites
 
 ### Required Accounts/Keys
-- **OpenRouter.ai API key** (REQUIRED - geo-free LLM routing)
-- LiveKit account (optional, for future streaming features)
+- **OpenRouter.ai API key** (REQUIRED - only cloud dependency for Gemini 3 Pro)
 
-### MVP Stack (No Additional Paid Services)
-- **Whisper** (local): STT on household server
-- **Web Speech API**: Browser TTS (free)
-- **Gemini 3 Pro** via OpenRouter: Vision + reasoning
+### MVP Stack (Local-First, Minimal Cloud)
+- **Faster-Whisper** (local): STT on self-hosted server
+- **Web Speech API**: Browser-native TTS (no cloud)
+- **Gemini 3 Pro** via OpenRouter: Vision + deep reasoning (only cloud call)
+- **SQLite**: Local database for student models and sessions
+- **Excalidraw**: Browser-based whiteboard (OSS)
 
-### Post-MVP Upgrades (Optional Paid Services)
-- Deepgram API key (low-latency cloud STT)
-- ElevenLabs API key (premium TTS)
+### Post-MVP Enhancements (Still Local)
+- Additional self-hosted servers for scaling
+- Local OSS vision models for fallback
+- Enhanced PWA offline capabilities
 
 ### Hardware Requirements
-- **Household Server**: Ubuntu or Windows machine on LAN
+- **Self-Hosted Server**: Ubuntu or Windows machine on building LAN/subnet
   - Python 3.9+
-  - Sufficient RAM for Whisper model (4GB+ recommended)
-  - GPU optional but helpful for faster Whisper inference
-- **Client Devices**: Android phone, Mac Mini, or Windows laptop with browser
+  - Sufficient RAM for Whisper model (4GB+ recommended, 8GB+ for medium/large)
+  - GPU recommended for faster Whisper inference (CUDA or similar)
+- **Client Devices**: Android phone (PWA), Mac Mini, Windows laptop with browser
 
 ### Development Tools
 - Python 3.9+
@@ -507,7 +521,7 @@ Each phase follows this testing pyramid:
 ### Python Dependencies
 ```
 openai  # OpenRouter uses OpenAI-compatible API
-faster-whisper  # Local STT
+faster-whisper  # Local STT (OSS)
 gradio  # Web frontend
 flask  # Alternative web frontend
 pillow  # Image processing
@@ -515,6 +529,8 @@ pydantic  # Data models
 python-dotenv  # Configuration
 pytest  # Testing
 pytest-asyncio  # Async testing
+aiosqlite  # Async SQLite support
+sqlalchemy  # Database ORM (optional)
 ```
 
 ### Knowledge Requirements

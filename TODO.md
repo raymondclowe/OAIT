@@ -36,7 +36,7 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 ### Configuration
 - [ ] Create `requirements.txt` with dependencies
   - [ ] openai (OpenRouter uses OpenAI-compatible API)
-  - [ ] faster-whisper (local STT)
+  - [ ] faster-whisper (local STT, OSS)
   - [ ] gradio (web frontend)
   - [ ] flask (alternative frontend)
   - [ ] pillow
@@ -46,15 +46,15 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
   - [ ] pytest-asyncio
   - [ ] pytest-mock
   - [ ] httpx (async HTTP client)
+  - [ ] aiosqlite (async SQLite support)
+  - [ ] sqlalchemy (optional ORM)
 - [ ] Create `.env.example` template
-  - [ ] OPENROUTER_API_KEY (REQUIRED)
+  - [ ] OPENROUTER_API_KEY (REQUIRED - only cloud dependency)
   - [ ] OPENROUTER_MODEL (default: google/gemini-3.0-pro)
-  - [ ] WHISPER_MODEL_SIZE (default: base)
+  - [ ] WHISPER_MODEL_SIZE (default: base, options: base/small/medium/large)
   - [ ] SERVER_HOST (default: 0.0.0.0)
   - [ ] SERVER_PORT (default: 7860)
-  - [ ] LIVEKIT_URL (optional, future)
-  - [ ] LIVEKIT_API_KEY (optional, future)
-  - [ ] LIVEKIT_API_SECRET (optional, future)
+  - [ ] SQLITE_DB_PATH (default: ./memory/oait.db)
 - [ ] Create `.gitignore`
   - [ ] .env
   - [ ] __pycache__
@@ -93,15 +93,15 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
   - [ ] Error handling for connection issues
 - [ ] Add logging for audio events
 
-### Speech-to-Text Integration (Local Whisper)
+### Speech-to-Text Integration (Local Faster-Whisper)
 - [ ] Create STT service abstraction
   - [ ] Abstract base class `STTService`
-  - [ ] **Whisper implementation (MVP - local, free)**
-  - [ ] Deepgram implementation (future, paid)
+  - [ ] **Faster-Whisper implementation (local, OSS)**
+  - [ ] Support for model sizes: base, small, medium, large
 - [ ] Implement transcription pipeline
   - [ ] Audio chunk processing
   - [ ] Batch transcription (Whisper doesn't stream)
-  - [ ] Configure model size (base/small/medium/large)
+  - [ ] Configure model size based on server GPU/RAM
   - [ ] Error recovery
 - [ ] Add transcription quality metrics
 
@@ -144,7 +144,7 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 
 ### Video Stream Handler
 - [ ] Implement `VideoStreamHandler` class
-  - [ ] `__init__` with LiveKit video track
+  - [ ] `__init__` with browser WebSocket video track
   - [ ] `capture_frame()` async method
   - [ ] Frame rate management
   - [ ] Quality settings
@@ -161,8 +161,8 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 ### Vision LLM Integration
 - [ ] Create vision service abstraction
   - [ ] Abstract base class `VisionService`
-  - [ ] GPT-4o implementation
-  - [ ] Moondream implementation (future)
+  - [ ] Gemini 3 Pro implementation (via OpenRouter)
+  - [ ] Local OSS vision model fallback (optional, future)
 - [ ] Implement `VisionAnalyzer` class
   - [ ] `analyze_whiteboard(image)` method
   - [ ] Parse LLM response to structured format
@@ -234,10 +234,11 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 ### Database Layer
 - [ ] Implement storage abstraction
   - [ ] `StorageBackend` interface
-  - [ ] JSON file implementation
-  - [ ] SQLite implementation (future)
+  - [ ] **SQLite implementation (primary - local storage)**
+  - [ ] JSON file implementation (fallback/export)
 - [ ] Add data encryption for PII
 - [ ] Implement backup/restore functionality
+- [ ] Add SQLite migrations support
 
 ### Testing
 - [ ] Unit tests for model validation
@@ -396,9 +397,8 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 ### Speech Synthesis
 - [ ] Create TTS service abstraction
   - [ ] Abstract base class `TTSService`
-  - [ ] ElevenLabs implementation
-  - [ ] Cartesia implementation (future)
-  - [ ] Local TTS implementation (future)
+  - [ ] **Web Speech API implementation (browser-native, no cloud)**
+  - [ ] Local TTS fallback (pyttsx3, espeak - optional)
 - [ ] Implement speech queue
 - [ ] Add interrupt handling
 
@@ -437,18 +437,24 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 
 ## Phase 7: MVP Integration
 
-### LiveKit Agent
-- [ ] Implement main agent class
-  - [ ] Room connection
-  - [ ] Track subscriptions
+### Main Application
+- [ ] Implement main application class
+  - [ ] WebSocket connection handling
+  - [ ] Audio/video stream subscriptions
   - [ ] Event handlers
 - [ ] Integrate all components
-  - [ ] Audio pipeline
-  - [ ] Vision pipeline
+  - [ ] Audio pipeline (Faster-Whisper)
+  - [ ] Vision pipeline (Gemini 3 Pro via OpenRouter)
   - [ ] OODA loop
-  - [ ] State management
+  - [ ] State management (SQLite)
 - [ ] Add graceful shutdown
 - [ ] Add health checks
+
+### PWA Support
+- [ ] Create PWA manifest
+- [ ] Add service worker for offline UI
+- [ ] Test on Android phone
+- [ ] Test on Windows desktop
 
 ### Configuration Management
 - [ ] Create configuration loader
@@ -475,14 +481,15 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 - [ ] Add fallback behaviors
 - [ ] Create error recovery procedures
 
-### Web Frontend (Optional)
-- [ ] Simple React app
-  - [ ] LiveKit room connection
-  - [ ] Excalidraw whiteboard
-  - [ ] Audio controls
+### Web Frontend (PWA)
+- [ ] Gradio/Flask app with PWA support
+  - [ ] WebSocket connection to local server
+  - [ ] Excalidraw whiteboard integration
+  - [ ] Audio controls (getUserMedia)
   - [ ] Session controls
-- [ ] Student profile selector
+- [ ] Student profile selector (from SQLite)
 - [ ] Session history viewer
+- [ ] Offline UI capability
 
 ### End-to-End Testing
 - [ ] E2E test: Complete session
@@ -538,10 +545,11 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 - [ ] Refine timing calculations
 
 ### Speech Quality
-- [ ] Test different TTS voices
+- [ ] Test different Web Speech API voices
 - [ ] Adjust speech rate and tone
-- [ ] Add emphasis/emotion where appropriate
+- [ ] Test browser TTS across different browsers
 - [ ] Test with different age groups
+- [ ] Evaluate local TTS alternatives (pyttsx3, espeak)
 
 ### Reliability
 - [ ] Improve error recovery
@@ -620,11 +628,12 @@ Fine-grained task checklist for OAIT implementation. Items are organized by phas
 - [ ] Programming tutoring
 - [ ] Writing tutoring
 
-### Privacy Features
-- [ ] Local-only mode
-- [ ] On-device models
-- [ ] Data retention policies
-- [ ] Export/delete user data
+### Privacy Features (Built-In by Default)
+- [x] Local-only mode (default architecture)
+- [x] On-premises processing (Faster-Whisper)
+- [ ] Data retention policies (SQLite cleanup)
+- [ ] Export/delete user data from SQLite
+- [ ] Audit logging for data access
 
 ---
 

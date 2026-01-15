@@ -79,23 +79,23 @@ class SessionState:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    STUDENT DEVICE (Browser)                          │
+│              STUDENT DEVICE (Browser PWA)                            │
 │  (Android Phone / Mac Mini / Windows Laptop)                        │
 │                                                                      │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │ getUserMedia │  │  Whiteboard  │  │ Web Speech API (TTS)     │  │
-│  │   (Audio)    │  │  (Canvas)    │  │ (Browser-native, free)   │  │
+│  │ getUserMedia │  │  Excalidraw  │  │ Web Speech API (TTS)     │  │
+│  │   (Audio)    │  │ (Whiteboard) │  │ (Browser-native)         │  │
 │  └──────┬───────┘  └──────┬───────┘  └──────────────────────────┘  │
 └─────────┼─────────────────┼─────────────────────────────────────────┘
           │                 │
           │    WebSocket    │
           ▼                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│              HOUSEHOLD SERVER (Ubuntu/Windows + Python)              │
+│        SELF-HOSTED SERVER (Ubuntu/Windows on Building Subnet)        │
 │                                                                      │
 │  ┌─────────────────────────┐  ┌─────────────────────────────────┐  │
-│  │   Gradio/Flask Web UI   │  │   Local Whisper STT             │  │
-│  │   (Port 7860)           │  │   (faster-whisper, no API key)  │  │
+│  │   Gradio/Flask Web UI   │  │   Faster-Whisper STT            │  │
+│  │   (Port 7860)           │  │   (Local, OSS, GPU optional)    │  │
 │  └───────────┬─────────────┘  └────────────────┬────────────────┘  │
 │              │                                  │                    │
 │       ┌──────▼──────────────────────────────────▼──────┐            │
@@ -112,21 +112,26 @@ class SessionState:
 │       └──────────────────┬──────────────────────────────┘            │
 │                          │                                           │
 │       ┌──────────────────▼──────────────────────────────┐            │
+│       │              SQLite Database                     │            │
+│       │  (Student models, session data, local storage)  │            │
+│       └──────────────────┬──────────────────────────────┘            │
+│                          │                                           │
+│       ┌──────────────────▼──────────────────────────────┐            │
 │       │              OpenRouter Client                   │            │
-│       │  (All LLM calls routed here - geo-free)         │            │
+│       │  (ONLY external call - Gemini 3 Pro)            │            │
 │       └──────────────────┬──────────────────────────────┘            │
 └──────────────────────────┼──────────────────────────────────────────┘
-                           │ HTTPS
+                           │ HTTPS (only external traffic)
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         OpenRouter.ai                                │
+│                    OpenRouter.ai (ONLY CLOUD SERVICE)                │
 │                                                                      │
 │  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Gemini 3 Pro (Preferred)                                    │    │
+│  │  Gemini 3 Pro (Deep Thinking + Image Analysis)               │    │
 │  │  ✓ Image input/output   ✓ Tool calling   ✓ High reasoning   │    │
 │  └─────────────────────────────────────────────────────────────┘    │
 │                                                                      │
-│  ⚠️ Note: OpenAI/Anthropic are geo-blocked - must use OpenRouter    │
+│  ⚠️ This is the ONLY cloud dependency - all else is local           │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -375,10 +380,11 @@ def calculate_optimal_delay(student_model, context):
 
 ### 8.1 Latency Targets
 
-- Audio transcription: < 300ms
-- Vision analysis: < 2s (acceptable since periodic)
+- Audio transcription: < 1s (local Faster-Whisper, GPU recommended)
+- Vision analysis: < 3s (OpenRouter call to Gemini 3 Pro)
 - Intervention decision: < 500ms
-- Speech synthesis: < 1s
+- Speech synthesis: < 500ms (Web Speech API, browser-native)
+- SQLite query: < 50ms
 
 ### 8.2 Accuracy Targets
 
@@ -414,56 +420,70 @@ def calculate_optimal_delay(student_model, context):
 
 ## 10. Deployment Architecture
 
-### 10.1 Household Server Setup
+### 10.1 Self-Hosted Server Setup (Local-First)
 
-The system runs on a household server (Ubuntu or Windows) accessible via LAN:
+The system runs on a self-hosted server (Ubuntu or Windows) accessible via building LAN/subnet:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    HOUSEHOLD LAN                            │
+│                 BUILDING LAN / SUBNET                        │
 │                                                             │
 │  ┌──────────────┐    ┌──────────────────────────────────┐  │
-│  │ Android Phone │    │     Household Server             │  │
+│  │ Android (PWA) │    │     Self-Hosted Server           │  │
 │  │ Mac Mini      │───▶│  (Ubuntu/Windows + Python)       │  │
-│  │ Windows Laptop│    │                                  │  │
+│  │ Windows (PWA) │    │                                  │  │
 │  └──────────────┘    │  ┌─────────────┐ ┌────────────┐  │  │
-│      (Clients)       │  │ Gradio/Flask│ │  Whisper   │  │  │
+│      (Clients)       │  │ Gradio/Flask│ │Faster-Whisper│  │
 │                      │  │  Frontend   │ │ (Local STT)│  │  │
+│                      │  └─────────────┘ └────────────┘  │  │
+│                      │  ┌─────────────┐ ┌────────────┐  │  │
+│                      │  │   SQLite    │ │ Excalidraw │  │  │
+│                      │  │  Database   │ │ (Browser)  │  │  │
 │                      │  └─────────────┘ └────────────┘  │  │
 │                      └──────────────┬───────────────────┘  │
 └─────────────────────────────────────│───────────────────────┘
-                                      │
+                                      │ (ONLY external call)
                            ┌──────────▼──────────┐
                            │   OpenRouter.ai     │
-                           │  (Geo-free routing) │
+                           │  (Gemini 3 Pro only)│
                            │                     │
                            │  ┌───────────────┐  │
                            │  │ Gemini 3 Pro  │  │
-                           │  │ (Preferred)   │  │
+                           │  │ (Deep Thinking│  │
+                           │  │  + Vision)    │  │
                            │  └───────────────┘  │
                            └─────────────────────┘
 ```
 
-### 10.2 API Constraints
+### 10.2 API Constraints (Local-First)
 
-> ⚠️ **CRITICAL**: OpenAI and Anthropic APIs are geo-blocked. All LLM calls MUST route through OpenRouter.ai.
+> ⚠️ **LOCAL-FIRST ARCHITECTURE**: Only OpenRouter.ai is used as an external cloud service.
 
 **OpenRouter Tool Support**: Not all models support function calling. Verify model capabilities before use.
 
 **Preferred Model**: Gemini 3 Pro (via OpenRouter)
-- ✅ High-quality reasoning and understanding
-- ✅ Image input support
-- ✅ Image output support  
-- ✅ Tool/function calling support
+- ✓ High-quality reasoning and understanding
+- ✓ Image input support
+- ✓ Image output support  
+- ✓ Tool/function calling support
 
-### 10.3 Cost Optimization (MVP)
+**Everything Else is Local**:
+- STT: Faster-Whisper (self-hosted server)
+- TTS: Web Speech API (browser-native)
+- Database: SQLite (local file)
+- Whiteboard: Excalidraw (browser-based)
+- Client: PWA (works offline for UI)
 
-| Service | MVP (Local/Free) | Post-MVP (Paid) |
+### 10.3 Cost Optimization (Local-First MVP)
+
+| Service | MVP (Local) | Post-MVP (Still Local) |
 |---------|------------------|------------------|
-| STT | Whisper (local server) | Deepgram |
-| TTS | Web Speech API (browser) | ElevenLabs |
+| STT | Faster-Whisper (self-hosted) | Same (upgrade model size) |
+| TTS | Web Speech API (browser-native) | Same |
 | LLM | Gemini 3 Pro (OpenRouter) | Same |
 | Vision | Gemini 3 Pro (OpenRouter) | Same |
+| Database | SQLite (local) | Same |
+| Whiteboard | Excalidraw (browser) | Same |
 
 ## 11. Extensibility
 
@@ -479,10 +499,10 @@ Future: Physical whiteboard via camera, gesture recognition, multiple students
 
 ### 11.3 AI Models
 
-Designed to be model-agnostic with adapter pattern (all via OpenRouter):
-- Vision/Reasoning: Gemini 3 Pro (preferred), Claude 3 Opus, GPT-4o
-- STT: Faster-Whisper (local), Deepgram (future)
-- TTS: Web Speech API (MVP), ElevenLabs (future)
+Designed to be model-agnostic with adapter pattern:
+- Vision/Reasoning: Gemini 3 Pro via OpenRouter (preferred), local OSS models (fallback)
+- STT: Faster-Whisper (local, OSS) - base/small/medium/large models
+- TTS: Web Speech API (browser-native, no cloud dependency)
 
 ## 12. Open Questions
 
@@ -492,5 +512,7 @@ Designed to be model-agnostic with adapter pattern (all via OpenRouter):
 4. How to balance intervention frequency across student diversity?
 5. What metrics best indicate successful tutoring?
 6. Which OpenRouter models support tool calling reliably?
-7. Fallback strategy when OpenRouter is unavailable?
-8. How to handle Whisper latency on lower-powered servers?
+7. Fallback strategy when OpenRouter is unavailable? (local OSS models?)
+8. How to optimize Faster-Whisper latency on CPU-only servers?
+9. PWA caching strategy for offline UI functionality?
+10. SQLite schema migration strategy for future updates?

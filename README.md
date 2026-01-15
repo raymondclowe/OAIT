@@ -18,8 +18,8 @@ OAIT (Observational AI Tutor) is not a traditional chatbot. Instead of reacting 
 
 OAIT operates on an event-driven architecture with three parallel streams:
 
-1. **Audio Stream (The Ears)**: Continuous speech-to-text using Deepgram or Faster-Whisper
-2. **Video Stream (The Eyes)**: Periodic whiteboard snapshots analyzed by Vision LLM
+1. **Audio Stream (The Ears)**: Continuous speech-to-text using local Faster-Whisper
+2. **Video Stream (The Eyes)**: Periodic whiteboard snapshots analyzed by Gemini 3 Pro (via OpenRouter)
 3. **Cognitive Loop (The Brain)**: OODA loop that synthesizes observations and makes intervention decisions
 
 ### Core Components
@@ -31,29 +31,32 @@ OAIT operates on an event-driven architecture with three parallel streams:
 
 ## Technology Stack
 
-### Architecture Overview
-**Household Server** (Ubuntu or Windows) running Python with Gradio or Flask frontend, accessible from LAN devices (Android phone, Mac Mini, Windows laptop).
+### Local-First Architecture
+**Household/Building Server** (Ubuntu or Windows) running Python with Gradio or Flask frontend, accessible from LAN/subnet devices. Progressive Web App (PWA) for local phone and desktop access.
 
-### API Routing (Required)
-- **OpenRouter.ai**: All cloud LLM calls routed through OpenRouter (OpenAI/Anthropic are geo-blocked)
-- **Gemini 3 Pro** (via OpenRouter): Preferred model for high-quality reasoning, understanding, and image work (supports image input/output)
+### Essential Cloud (LLM Only)
+- **OpenRouter.ai**: Only external dependency - routes to Gemini 3 Pro for deep thinking and image analysis
+- **Gemini 3 Pro** (via OpenRouter): Preferred model for reasoning, understanding, and image work
 
-> ⚠️ **Note**: OpenRouter supports tool calling with *some* models only - verify model capabilities before implementation.
+> ⚠️ **Note**: OpenRouter is the ONLY required cloud service. All other processing is local or on-premises.
 
-### MVP Stack (Local-First)
-- **Whisper** (local): Speech-to-text on household server
-- **Web Speech API**: Browser-based TTS for MVP (upgrade to paid services later)
-- **Gradio/Flask**: Web frontend served from household server
-- **SQLite/JSON**: Local student model storage
+### MVP Stack (100% Local Processing)
+- **Faster-Whisper**: Local speech-to-text on self-hosted server
+- **Web Speech API**: Browser-native TTS (no cloud TTS)
+- **Gradio/Flask**: Web frontend served from local server
+- **SQLite**: Local student model and session storage
+- **Excalidraw**: Browser-based whiteboard (runs locally)
+- **PWA**: Progressive Web App for phone/desktop (works offline for UI)
 
-### Future Enhancements (Post-MVP)
-- **ElevenLabs/Cartesia**: Premium TTS (via OpenRouter where available)
-- **Deepgram**: Low-latency cloud STT
-- **LiveKit**: Real-time streaming (if needed)
+### Self-Hosted Infrastructure
+- **Local Server**: Linux or Windows machine on building subnet
+- **Nearby Processing**: Python code running on-premises
+- **Local Storage**: SQLite database, JSON files
 
 ### Open Source Components
-- **Faster-Whisper**: Optimized local transcription
-- **Excalidraw**: Web-based whiteboard component
+- **Faster-Whisper**: Optimized local transcription (OSS)
+- **Excalidraw**: Web-based whiteboard component (OSS)
+- **Gradio**: Web UI framework (OSS)
 
 ## Project Status
 
@@ -68,9 +71,10 @@ See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap and [T
 ### Prerequisites
 
 - Python 3.9+
-- Household server (Ubuntu or Windows) on LAN
-- OpenRouter.ai API key (required - geo-free routing)
-- Client device: Android phone, Mac Mini, or Windows laptop
+- Self-hosted server (Ubuntu or Windows) on building LAN/subnet
+- OpenRouter.ai API key (required - only cloud dependency)
+- Client device with browser: Android phone (PWA), Mac Mini, Windows laptop
+- GPU recommended for faster Whisper inference (optional)
 
 ### Installation
 
@@ -118,4 +122,4 @@ python src/oait/server.py --host 0.0.0.0 --port 7860
 
 ## Acknowledgments
 
-Based on architectural concepts using LiveKit Agents and modern multimodal AI approaches for creating observational, human-in-the-loop AI systems.
+Based on architectural concepts from modern multimodal AI approaches for creating observational, human-in-the-loop AI systems. Uses open-source components including Faster-Whisper and Excalidraw.
