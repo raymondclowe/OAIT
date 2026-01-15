@@ -113,6 +113,32 @@
             color: #2d3748;
             margin-bottom: 15px;
             font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .panel-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .popout-btn {
+            padding: 4px 10px;
+            font-size: 12px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #718096;
+        }
+        
+        .popout-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
         }
         
         #whiteboard {
@@ -191,13 +217,19 @@
         </div>
         
         <div class="workspace">
-            <div class="panel">
-                <h2>📝 Whiteboard</h2>
+            <div class="panel" id="whiteboardPanel">
+                <h2>
+                    <span class="panel-title">📝 Whiteboard</span>
+                    <button class="popout-btn" onclick="popOut('whiteboard')">↗️ Pop Out</button>
+                </h2>
                 <canvas id="whiteboard"></canvas>
             </div>
             
-            <div class="panel">
-                <h2>💬 Transcript</h2>
+            <div class="panel" id="transcriptPanel">
+                <h2>
+                    <span class="panel-title">💬 Transcript</span>
+                    <button class="popout-btn" onclick="popOut('transcript')">↗️ Pop Out</button>
+                </h2>
                 <div id="transcript" class="transcript-area">
                     <p style="color: #a0aec0; text-align: center; margin-top: 100px;">
                         Start speaking to see transcripts...
@@ -206,8 +238,11 @@
             </div>
         </div>
         
-        <div class="panel">
-            <h2>🤖 AI Responses</h2>
+        <div class="panel" id="aiPanel">
+            <h2>
+                <span class="panel-title">🤖 AI Responses</span>
+                <button class="popout-btn" onclick="popOut('ai')">↗️ Pop Out</button>
+            </h2>
             <div id="aiResponses" class="ai-responses">
                 <p style="color: #a0aec0; text-align: center; margin-top: 50px;">
                     AI responses will appear here...
@@ -215,8 +250,14 @@
             </div>
         </div>
         
-        <div class="panel" style="margin-top: 20px;">
-            <h2>🔧 Debug Log <button id="clearDebug" style="padding: 4px 8px; font-size: 12px; margin-left: 10px;">Clear</button></h2>
+        <div class="panel" id="debugPanel" style="margin-top: 20px;">
+            <h2>
+                <span class="panel-title">🔧 Debug Log</span>
+                <span>
+                    <button id="clearDebug" style="padding: 4px 8px; font-size: 12px;">Clear</button>
+                    <button class="popout-btn" onclick="popOut('debug')">↗️ Pop Out</button>
+                </span>
+            </h2>
             <div id="debugLog" class="debug-area" style="height: 200px; overflow-y: auto; background: #1a202c; border: 2px solid #4a5568; border-radius: 8px; padding: 15px; font-family: monospace; font-size: 12px; color: #68d391;">
                 <p style="color: #a0aec0;">Debug messages will appear here...</p>
             </div>
