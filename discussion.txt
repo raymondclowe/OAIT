@@ -1,0 +1,374 @@
+### USER
+o build a multimodal homework tutor that can see a whiteboard and listen continuously, the most modern open-source approach is to use **LiveKit Agents** paired with the **Pipecat AI** framework. 
+This combination allows your bot to act like a real participant in a virtual room, handling the complex logic of "looking" at a screen while "listening" to a live audio stream.
+**1. The Core Architecture**
+*   **The Brain (Vision + Logic):** Use **GPT-4o** via the OpenAI Python SDK as it can process both audio transcripts and images (like a student's whiteboard) in real-time.
+    
+*   **The Ears (STT):** Use **Deepgram** for ultra-low latency speech-to-text. It can stream audio continuously, allowing the bot to maintain a "transcript buffer" of what the student is saying.
+    
+*   **The Eyes (Vision):** The bot can join a LiveKit room where the student is sharing their screen or a digital whiteboard (like **Excalidraw**). The bot takes periodic "snapshots" of the video track to "see" the math problem or writing.
+    
+*   **The Voice (TTS):** Use **ElevenLabs** or **Cartesia** for natural-sounding speech that can be piped back into the live room. 
+    
+**2. How the "Whiteboard" Logic Works**
+You don't need a complex video processing engine. Instead:
+*   The student uses a web-based whiteboard (like **fast-board**).
+    
+*   Your Python script uses a **Vision LLM** to analyze the student's work.
+    
+*   **Triggering a Response:** The bot can be programmed to "interrupt" or respond whenever it detects a mistake in the transcript buffer or a specific drawing action on the screen. 
+    
+**3. Implementation Steps**
+1.  **Set up a LiveKit Server:** Use the LiveKit Cloud (free tier available) or host it yourself.
+    
+2.  **Initialize the Bot Agent:** Create a `bot.py` file using the `livekit-agents` library.
+    
+3.  **Define the Pipeline:**
+    
+    **python**
+    
+    ```
+    # Conceptual Pipecat/LiveKit pipeline
+    pipeline = Pipeline([
+        stt_service,       # Listens to student
+        context_aggregator, # Keeps track of the "buffer" 
+        vision_llm,        # "Looks" at the whiteboard frames
+        tts_service        # Speaks back the correction
+    ])
+    ```
+    
+    Use code with caution.
+    
+4.  **Connect to a Web Front-end:** Use a simple React-based whiteboard and embed the LiveKit video components so the student can see the tutor's "screen" or face. 
+    
+**4. Open Source Alternatives for Components**
+*   **Local Vision Brain:** Use **Ollama** with the `moondream` model to analyze images locally.
+    
+*   **Local Ears:** Use **Faster-Whisper** for on-device transcription. 
+    
+Do you want to see a **Python code snippet** for a basic voice agent that connects to a room and starts transcribing audio into a buffer?
+**9 sites**
+*   **Build an AI Voice Yoga Instructor in Python - GetStream.io**
+    
+    10 Nov 2025 — In summary, we: _Configure a new agent with edge=getstream. Edge() for low-latency audio and video transport._ Instruct the agen...
+    
+    GetStream
+    
+*   **LiveKit Documentation | The platform for voice, video, and ...**
+    
+    Build. Realtime framework for production-grade multimodal and voice AI agents. Integrate. Connect your agent to models, systems, a...
+    
+    LiveKit Documentation
+    
+*   **Build Your First Voice AI Agent in 20 Minutes with LiveKit ...**
+    
+    5 Oct 2025 — and it's really hard to truly customize your agents. when it comes down to it i respect these platforms for being easy to use and ...
+    
+    YouTube·Cole Medin
+    
+    11m
+    
+Show all
+yes give me a outline doesn't need to be real Python code it can be pseudocode but to explain the general concepts
+To build this tutor, you need an
+**asynchronous event loop** that manages three streams simultaneously: **Audio** (the student's voice), **Video** (the whiteboard/screen), and **Intelligence** (the AI's decision-making).
+Here is the high-level logic for your Python program:
+**1. The Global Memory (The "Context")**
+The bot needs a shared memory space to store what it has seen and heard so it can make connections (e.g., "I see you wrote 5, but you just said 4").
+**python**
+```
+# Pseudo-storage
+transcript_buffer = []  # Stores the last 30 seconds of speech
+whiteboard_snapshot = None  # Stores the latest image of the math problem
+```
+Use code with caution.
+**2. The "Ear" Thread (Continuous Listening)**
+This loop runs forever in the background, converting sound into text and shoving it into the buffer.
+**python**
+```
+async def ear_stream():
+    while session_active:
+        audio_chunk = listen_from_microphone()
+        text = speech_to_text(audio_chunk) # e.g., using Deepgram or Whisper
+        transcript_buffer.append(text)
+        
+        # Keep the buffer short so the AI doesn't get confused
+        if len(transcript_buffer) > 20:
+            transcript_buffer.pop(0)
+```
+Use code with caution.
+**3. The "Eye" Thread (Visual Analysis)**
+The bot doesn't need to process 60 frames per second. It just needs to "peek" every few seconds to see the progress.
+**python**
+```
+async def eye_stream():
+    while session_active:
+        # Capture the current frame from the shared screen/whiteboard
+        whiteboard_snapshot = capture_frame(video_stream)
+        
+        # Optional: Use a Vision model to "describe" the image
+        # logic: "Student has written '2x + 5 = 10' but hasn't solved it yet."
+        analysis = analyze_image(whiteboard_snapshot) 
+        
+        wait(2) # Only look every 2 seconds to save processing power
+```
+Use code with caution.
+**4. The "Brain" Loop (Decision Making)**
+This is the controller. It looks at the buffer and the image, then decides if it should speak.
+**python**
+```
+async def brain_controller():
+    while session_active:
+        # 1. Check if the student stopped talking (Silence Detection)
+        if silence_detected(duration=1.5):
+            
+            # 2. Combine the data
+            current_context = {
+                "what_student_said": " ".join(transcript_buffer),
+                "what_is_on_board": whiteboard_snapshot
+            }
+            
+            # 3. Ask the AI if it should help
+            response = LLM.generate(
+                prompt="You are a tutor. Based on the speech and the image, "
+                       "is the student stuck or did they make a mistake?",
+                data=current_context
+            )
+            
+            # 4. Speak back if needed
+            if response.should_interact:
+                audio_reply = text_to_speech(response.text)
+                play_audio_to_meeting(audio_reply)
+                transcript_buffer.clear() # Clear buffer after responding
+```
+Use code with caution.
+**5. The "Whiteboard" Interface**
+Since you want this to be simple and open-source:
+*   **The Backend:** Your Python script runs as a LiveKit Agent.
+    
+*   **The Frontend:** A simple webpage using the Excalidraw React Component. When the student draws, the "Video Stream" is simply a screen-capture of that browser window sent to the bot.
+    
+**How to Start**
+The easiest way to turn this into real code is to use the **LiveKit Agent Quickstart**. It provides a "VoiceAssistant" class that already handles the "Ear" and "Brain" logic; you would just need to add the "Vision" component to periodically grab frames.
+Should we look at the specific **API keys** or **local libraries** (like Ollama) you'll need to make these "Ears" and "Eyes" actually work?
+  
+  
+  
+Turn the above notes into something a bit more structured as a document.  Also consider that this will not be a chat or dialogue in the typical ai chat sense, the ai will “think to itself” and only speak when spoken to, or when it sees an error that needs fixing.  So it has an internal dialogue that is not spoken, maybe a “thinking tool” or a “waiting tool” or a “wait for something to happen tool”.  It will also need to keep an internal state of it’s mental image of the mental state and capabiolities of the student, both long term general and specific to this session.  So it can use tools to query and update its mental model of what the student knows, how they respond to feedback, what types of examples work well for them and so on - pedagogy stuff.
+
+### ASSISTANT
+<details type="reasoning" done="true" duration="12">
+<summary>Thought for 12 seconds</summary>
+&gt; **Understanding the User Profile**
+&gt; 
+&gt; I&#x27;m currently focused on defining the user profile. I&#x27;ve broken down the user&#x27;s skillset and experience, noting their proficiency with various programming languages, and their need for architectural guidance. This analysis is crucial to tailor the architecture and implementation guide effectively. The goal is to craft a guide that resonates with their existing knowledge while providing clear, high-level direction.
+&gt; 
+&gt; 
+&gt; **Mapping the Requirements**
+&gt; 
+&gt; My focus has shifted to the intricate details of the AI Tutor&#x27;s architecture. The need for continuous data processing, and proactive internal states, is top of mind. The challenge is clear: how can I structure the system to balance this ongoing analysis and reactive output? Moreover, I&#x27;m delving into the &quot;Student Model,&quot; aiming to determine the most effective approach for maintaining comprehensive user data.
+&gt; 
+&gt; 
+&gt; **Formulating the Core Concept**
+&gt; 
+&gt; I&#x27;m now zeroing in on the fundamental principle that drives the system: the OODA loop. It&#x27;s becoming the cornerstone of the architecture, providing a framework to structure the input-processing-output cycle. This aligns perfectly with the goal of continuous observation and reactive output. The &#x27;thinking&#x27; mechanism, involving internal monologues and structured output format, is beginning to take shape.
+&gt; 
+&gt; 
+&gt; **Detailing the Architectural Blueprint**
+&gt; 
+&gt; I&#x27;m now diving deep into the architecture document. Focusing on the design document&#x27;s key sections: the &quot;Cognitive Loop&quot; and &quot;State Management.&quot; I&#x27;m also refining pseudocode to show the &quot;Observational Tutor&quot; in action, with emphasis on the internal monologue. The critical part is to prevent the bot from interrupting the student, and is the current focal point. I&#x27;m structuring section 4 as a database update approach, which will be instrumental in the AI&#x27;s understanding.
+&gt; 
+&gt; 
+&gt; **Revising the Output Structure**
+&gt; 
+&gt; I&#x27;m now focusing on the iterative process of drafting the document, emphasizing key sections. I&#x27;ve pinpointed the essential need to prevent constant interruptions from the bot, addressing this challenge within the &quot;Cognitive Loop&quot; section. The solution involves a `Decide` phase, using student state to determine the necessity of an intervention. The &quot;Student Model&quot; is framed as a critical database update.
+&gt; 
+&gt; 
+</details>
+This references the architecture of a **"Human-in-the-Loop" Observational Agent**. Unlike a standard chatbot (which is reactive: Input $\to$ Output), this system is proactive but restrained (Input $\to$ Analysis $\to$ Decision $\to$ Action/Inaction).
+
+Here is the design document for your Multimodal Tutor.
+
+---
+
+# Architecture Design: The Observational AI Tutor
+
+## 1. Core Philosophy: The "OODA" Loop
+The agent does not effectively "chat." Instead, it runs a continuous **Observe-Orient-Decide-Act (OODA)** loop. It is constantly "thinking," but it rarely speaks.
+
+1.  **Observe:** Ingest audio and video frames.
+2.  **Orient:** Update the internal "Mental Model" of the student’s current state.
+3.  **Decide:** Evaluate against a threshold: *Does this require intervention?*
+4.  **Act:** Either stay silent, update a database record, or speak.
+
+## 2. The Data Structures
+
+Before writing code, we must define the state. The AI needs two distinct types of memory.
+
+### A. The Student Model (Long-Term Memory)
+This is a persistent JSON object or SQL record that evolves over weeks of tutoring.
+```json
+{
+  "student_id": "alex_01",
+  "competencies": {
+    "fractions": "mastered",
+    "polynomials": "struggling",
+    "graphing": "unknown"
+  },
+  "pedagogy_profile": {
+    "patience_level": "medium",
+    "preferred_analogies": "needs real-world examples",
+    "response_to_correction": "gets defensive if corrected too quickly"
+  }
+}
+```
+
+### B. The Session Context (Short-Term/Working Memory)
+This tracks exactly what is happening *right now*.
+```python
+class SessionState:
+    current_problem_image: Image  # The last frame seen
+    student_speech_buffer: str    # "So if I move the X over here..."
+    ai_internal_monologue: list   # The history of the AI's silent thoughts
+    silence_duration: float       # How long since the student spoke/moved
+```
+
+## 3. The Logic Flow (Pseudocode)
+
+This system requires an **Asynchronous Event Loop**. We use `LiveKit Agent` (via the Pipecat framework) to handle the streams.
+
+### The "Thought Cycle"
+The AI doesn't just react to voice; it reacts to *events* (a new drawing, a pause in speech).
+
+```python
+import asyncio
+from livekit import agents
+
+# 1. DEFINE THE TOOLS
+# These are functions the LLM can "call" internally without speaking to the student.
+tools = [
+    {
+        "name": "update_student_model",
+        "description": "Save a note about student capability (e.g., 'Forgot to flip the negative sign').",
+        "parameters": {"topic": "str", "observation": "str"}
+    },
+    {
+        "name": "consult_pedagogy_db",
+        "description": "Retrieve specific teaching strategies for this student.",
+        "parameters": {"query": "str"}
+    }
+]
+
+class TutorAgent(agents.VoiceAssistant):
+    
+    def __init__(self):
+        self.memory = load_student_database("alex_01")
+        self.buffer = TranscriptBuffer()
+        self.last_whiteboard_state = None
+
+    # This runs continuously in the background
+    async def run_thought_loop(self):
+        while True:
+            # A. OBSERVE
+            # Determine if we have enough data to "think"
+            #Triggers: 
+            # 1. Silence > 3 seconds
+            # 2. Significant change in the whiteboard pixels
+            # 3. Direct question from student ("Hey bot, is this right?")
+            
+            trigger = await self.wait_for_trigger()
+            
+            # Snap the current state
+            current_frame = self.video_track.capture()
+            recent_audio = self.buffer.get_last_20_seconds()
+
+            # B. ORIENT (The Internal Monologue)
+            # We send a prompt to the LLM that forbids it from speaking immediately.
+            # It must return a JSON thought process first.
+            
+            thought_process = await self.llm.think(
+                system_prompt="""
+                    You are a silent observer. Analyze the student's board and speech.
+                    Current Student Profile: {self.memory}
+                    
+                    Your Goal: Do NOT help unless:
+                    1. The student explicitly asks.
+                    2. The student has made a critical error and moved past it.
+                    3. The student has been stuck/silent for too long.
+                    
+                    Output format: JSON
+                    {
+                        "analysis": "Student wrote 2+2=5.",
+                        "student_state": "Confused",
+                        "strategy": "Socratic questioning",
+                        "action": "SPEAK" or "WAIT" or "UPDATE_DB"
+                    }
+                """,
+                inputs=[current_frame, recent_audio]
+            )
+
+            # C. DECIDE & ACT
+            if thought_process['action'] == "WAIT":
+                continue # Loop back and keep watching
+                
+            elif thought_process['action'] == "UPDATE_DB":
+                # Update our long-term memory about a specific struggle
+                self.update_student_model(thought_process['analysis'])
+                
+            elif thought_process['action'] == "SPEAK":
+                # Only now do we generate audio
+                response_text = await self.llm.generate_speech(
+                    context=thought_process['analysis'],
+                    strategy=thought_process['strategy']
+                )
+                await self.speak(response_text)
+
+```
+
+## 4. The Pedagogical "Tools"
+The AI "thinks" by calling functions. The prompt should encourage the LLM to use these internal tools before generating speech.
+
+**Tool 1: `diagnose_error`**
+*   *Input:* Image of equation + Transcript.
+*   *Internal Logic:* Solves the math silently in Python code to verify the student result.
+*   *Output to AI:* "Student calculation matches Python calculation" OR "Error detected at line 2."
+
+**Tool 2: `check_patience`**
+*   *Input:* `silence_duration`
+*   *Internal Logic:* Checks the student profile. If the student gets annoyed by interruptions, increase the wait time before offering help.
+
+## 5. Implementation Roadmap using LiveKit Agents & Pipecat
+
+To build this specifically with the stack you chose:
+
+1.  **Initialize Pipecat Pipeline:**
+    Create a pipeline that routes Audio -> `Deepgram STT`.
+    Route Video -> `FrameBuffer` (custom class to hold last valid image).
+2.  **The "VAD" (Voice Activity Detection) Tweak:**
+    Standard VAD triggers the bot when the user *stops* talking. You need to override this.
+    *   *Standard Bot:* User stops talking -> Bot replies.
+    *   *Tutor Bot:* User stops talking -> Bot runs `assess_situation()` -> Bot *may* reply or stay silent.
+3.  **The LLM Integration:**
+    Use `OpenAI GPT-4o`. It is currently the best at handling "Interleaved" audio and image data in a single request, which reduces latency.
+
+## 6. Where the logic lives (Directory Structure)
+
+```text
+/tutor-bot
+  /memory
+    student_db.json     # The persistent storage
+    pedagogy_rules.py   # Python functions defining teaching strategies
+  
+  /vision
+    board_analyzer.py   # Helper to crop/clean whiteboard screenshots
+  
+  agent.py              # The Main Loop (LiveKit Worker)
+  tools.py              # The "Thinking" tools (update_db, check_math)
+```
+
+## Summary of the Difference
+In a normal chat bot, the **User** drives the loop (User speaks -> Bot speaks).
+In this Tutor bot, the **Events** drive the loop (Time passes / Pixels change -> Bot thinks -> Bot decides).
+
+---
+**İşlem Ücreti:** 37.25 s | 112.55 T/s | 4192 Tokens | $0.031154
