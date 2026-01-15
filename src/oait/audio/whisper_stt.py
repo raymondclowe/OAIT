@@ -41,8 +41,8 @@ class WhisperSTT:
             )
             logger.info("Whisper model loaded successfully")
 
-    async def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
-        """Transcribe audio to text.
+    def transcribe_sync(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
+        """Transcribe audio to text synchronously (CPU-bound operation).
 
         Args:
             audio: Audio data as numpy array
@@ -55,7 +55,7 @@ class WhisperSTT:
             self.load_model()
 
         try:
-            # Transcribe with faster-whisper
+            # Transcribe with faster-whisper (CPU-bound, no async benefit)
             segments, info = self.model.transcribe(
                 audio,
                 language="en",
@@ -70,6 +70,20 @@ class WhisperSTT:
         except Exception as e:
             logger.error(f"Transcription error: {e}")
             return ""
+
+    async def transcribe(self, audio: np.ndarray, sample_rate: int = 16000) -> str:
+        """Transcribe audio to text (async wrapper for thread pool execution).
+
+        Args:
+            audio: Audio data as numpy array
+            sample_rate: Sample rate of audio (default 16000)
+
+        Returns:
+            Transcribed text
+        """
+        import asyncio
+        # Run CPU-bound transcription in thread pool
+        return await asyncio.to_thread(self.transcribe_sync, audio, sample_rate)
 
     def unload_model(self) -> None:
         """Unload the model to free memory."""

@@ -2,6 +2,7 @@
 
 import logging
 from typing import Dict, Any, Optional
+import numpy as np
 from PIL import Image
 from ..api.openrouter import OpenRouterClient
 
@@ -101,8 +102,6 @@ Be concise but thorough."""
             curr_gray = curr_resized.convert("L")
 
             # Calculate average pixel difference
-            import numpy as np
-
             prev_array = np.array(prev_gray)
             curr_array = np.array(curr_gray)
 
