@@ -60,20 +60,26 @@ OAIT operates on an event-driven architecture with three parallel streams:
 
 ## Project Status
 
-🚧 **In Development** - Currently in planning and specification phase
+🚀 **MVP in Active Development** - Core infrastructure complete, server operational
 
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap and [TODO.md](TODO.md) for current task list.
+**Completed Phases:**
+- ✅ Phase 0: Project Foundation (data models, configuration, tests)
+- ✅ Phase 1-2: WebSocket Integration (audio/video streaming)
+- ✅ Phase 5: AI Tool System (pedagogical tools)
+
+**Current Focus:**
+- Phase 6: Intervention System (OODA loop integration)
+- Phase 7: MVP Integration (testing and refinement)
+
+See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap and [STATUS.md](STATUS.md) for current progress.
 
 ## Getting Started
-
-*(To be added as implementation progresses)*
 
 ### Prerequisites
 
 - Python 3.9+
-- Self-hosted server (Ubuntu or Windows) on building LAN/subnet
 - OpenRouter.ai API key (required - only cloud dependency)
-- Client device with browser: Android phone (PWA), Mac Mini, Windows laptop
+- Modern web browser with microphone support
 - GPU recommended for faster Whisper inference (optional)
 
 ### Installation
@@ -88,30 +94,108 @@ pip install -r requirements.txt
 
 # Configure API keys
 cp .env.example .env
-# Edit .env with your OpenRouter API key
+# Edit .env and set your OpenRouter API key:
+# OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
 ### Running the Server
 
 ```bash
-# Start the household server (accessible on LAN)
-python src/oait/server.py --host 0.0.0.0 --port 7860
+# Start the WebSocket server
+python start_server.py
+
+# Or with uvicorn directly:
+uvicorn oait.server.websocket_server:app --host 0.0.0.0 --port 7860 --reload
 ```
+
+The server will start on `http://localhost:7860`. Open this URL in your browser.
 
 ### Usage
 
-*(To be added as implementation progresses)*
+1. **Start a Session**
+   - Enter a student ID in the input field
+   - Click "Start Session" to begin
+
+2. **Enable Audio**
+   - Click "Start Audio" (you'll be prompted for microphone permission)
+   - Speak naturally - your speech will be transcribed in real-time
+
+3. **Use the Whiteboard**
+   - Draw math problems or notes on the canvas
+   - The AI observes your work continuously
+
+4. **Interact with AI**
+   - The AI listens and observes silently
+   - When appropriate, it will intervene with helpful guidance
+   - AI responses are spoken using your browser's text-to-speech
+
+5. **Stop Session**
+   - Click "Stop Session" when done
+   - Your student model is saved automatically
+
+### Current Features
+
+✅ Real-time audio transcription (Faster-Whisper local STT)  
+✅ Canvas whiteboard with drawing  
+✅ WebSocket communication  
+✅ Session management  
+✅ Web Speech API text-to-speech  
+✅ Student model persistence (SQLite)  
+✅ AI pedagogical tools (6 tools)  
+✅ Responsive web UI  
 
 ## Documentation
 
 - [SPECIFICATION.md](SPECIFICATION.md) - Detailed technical specification
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Phased development plan
+- [STATUS.md](STATUS.md) - Current implementation status
 - [TODO.md](TODO.md) - Fine-grained task checklist
-- [discussion.txt](discussion.txt) - Original design discussion
+- [learnings.md](learnings.md) - Development learnings and decisions
+- [src/oait/server/README.md](src/oait/server/README.md) - WebSocket server documentation
+
+## Testing
+
+```bash
+# Run all tests
+pytest -v
+
+# Run with coverage
+pytest --cov=src/oait --cov-report=html
+
+# Run specific test file
+pytest tests/unit/test_pedagogical_tools.py -v
+```
+
+**Test Status**: 37/37 tests passing ✅
+
+## Architecture Overview
+
+```
+Browser Client (PWA)
+    ├─ Audio: getUserMedia → WebSocket → Whisper STT (local)
+    ├─ Video: Canvas → WebSocket → Gemini 3 Pro (OpenRouter)
+    └─ TTS: Web Speech API (browser-native)
+
+FastAPI WebSocket Server
+    ├─ Session Management
+    ├─ Audio Processing (Faster-Whisper local)
+    ├─ Vision Processing (Gemini 3 Pro via OpenRouter)
+    ├─ OODA Loop Decision Making
+    ├─ AI Pedagogical Tools (6 tools)
+    └─ SQLite Database (student models)
+
+Only Cloud Service: OpenRouter.ai (Gemini 3 Pro)
+Everything else runs locally!
+```
 
 ## Contributing
 
-*(To be defined)*
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
 
 ## License
 
@@ -119,4 +203,4 @@ python src/oait/server.py --host 0.0.0.0 --port 7860
 
 ## Acknowledgments
 
-Based on architectural concepts from modern multimodal AI approaches for creating observational, human-in-the-loop AI systems. Uses open-source components including Faster-Whisper and Excalidraw.
+Based on architectural concepts from modern multimodal AI approaches for creating observational, human-in-the-loop AI systems. Uses open-source components including Faster-Whisper and FastAPI.

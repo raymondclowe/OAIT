@@ -2,8 +2,11 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from ..audio.stream_handler import TranscriptBuffer, SilenceDetector
 
 
 class LearningStyle(str, Enum):
@@ -150,6 +153,7 @@ class Decision(BaseModel):
     strategy: Optional[InterventionStrategy] = None
     estimated_duration: float = 0.0  # seconds
     fallback_plan: str = ""
+    response_text: Optional[str] = None  # Text to speak if action is SPEAK
 
 
 class InternalMonologue(BaseModel):
@@ -177,6 +181,10 @@ class SessionState(BaseModel):
     student_is_writing: bool = False
     last_intervention_time: float = 0.0
     started_at: datetime = Field(default_factory=datetime.now)
+    
+    # Runtime components (not serialized)
+    transcript_buffer: Optional["TranscriptBuffer"] = Field(default=None, exclude=True)
+    silence_detector: Optional["SilenceDetector"] = Field(default=None, exclude=True)
 
     def add_transcript(self, text: str, timestamp: float) -> None:
         """Add a transcript entry."""
