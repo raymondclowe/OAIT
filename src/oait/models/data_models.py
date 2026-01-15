@@ -150,6 +150,7 @@ class Decision(BaseModel):
     strategy: Optional[InterventionStrategy] = None
     estimated_duration: float = 0.0  # seconds
     fallback_plan: str = ""
+    response_text: Optional[str] = None  # Text to speak if action is SPEAK
 
 
 class InternalMonologue(BaseModel):
@@ -177,6 +178,10 @@ class SessionState(BaseModel):
     student_is_writing: bool = False
     last_intervention_time: float = 0.0
     started_at: datetime = Field(default_factory=datetime.now)
+    
+    # Runtime components (not serialized)
+    transcript_buffer: Any = Field(default=None, exclude=True)
+    silence_detector: Any = Field(default=None, exclude=True)
 
     def add_transcript(self, text: str, timestamp: float) -> None:
         """Add a transcript entry."""
