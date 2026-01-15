@@ -61,6 +61,10 @@ tmp/
 temp/
 *.tmp
 
-# Model caches
-models/
+# Model caches (downloaded AI models, not our source code)
 *.model
+*.bin
+*.pt
+*.onnx
+/models/
+!/src/oait/models/
