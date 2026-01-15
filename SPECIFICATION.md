@@ -78,45 +78,61 @@ class SessionState:
 ### 3.1 Component Diagram
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   LiveKit Room                      │
-│  (Student's audio/video stream)                     │
-└──────────────┬──────────────┬───────────────────────┘
-               │              │
-       ┌───────▼──────┐  ┌───▼──────────┐
-       │ Audio Stream │  │ Video Stream │
-       │  (The Ears)  │  │  (The Eyes)  │
-       └───────┬──────┘  └───┬──────────┘
-               │              │
-       ┌───────▼──────────────▼──────────┐
-       │    Event Aggregator              │
-       │  (Trigger Detection)             │
-       └───────┬──────────────────────────┘
-               │
-       ┌───────▼──────────────────────────┐
-       │    Cognitive Loop                │
-       │  (OODA Implementation)           │
-       │                                  │
-       │  ┌─────────────────────┐        │
-       │  │  Observe            │        │
-       │  │  ↓                  │        │
-       │  │  Orient (Internal   │        │
-       │  │         Monologue)  │        │
-       │  │  ↓                  │        │
-       │  │  Decide             │        │
-       │  │  ↓                  │        │
-       │  │  Act                │        │
-       │  └─────────────────────┘        │
-       └───────┬──────────────────────────┘
-               │
-       ┌───────▼──────────────────────────┐
-       │    Action Router                 │
-       └───┬──────────┬──────────┬────────┘
-           │          │          │
-      ┌────▼───┐ ┌───▼────┐ ┌──▼────────┐
-      │ Speak  │ │ Update │ │ Continue  │
-      │ (TTS)  │ │   DB   │ │ Observing │
-      └────────┘ └────────┘ └───────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│              STUDENT DEVICE (Browser PWA)                            │
+│  (Android Phone / Mac Mini / Windows Laptop)                        │
+│                                                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
+│  │ getUserMedia │  │  Excalidraw  │  │ Web Speech API (TTS)     │  │
+│  │   (Audio)    │  │ (Whiteboard) │  │ (Browser-native)         │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────────────────┘  │
+└─────────┼─────────────────┼─────────────────────────────────────────┘
+          │                 │
+          │    WebSocket    │
+          ▼                 ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│        SELF-HOSTED SERVER (Ubuntu/Windows on Building Subnet)        │
+│                                                                      │
+│  ┌─────────────────────────┐  ┌─────────────────────────────────┐  │
+│  │   Gradio/Flask Web UI   │  │   Faster-Whisper STT            │  │
+│  │   (Port 7860)           │  │   (Local, OSS, GPU optional)    │  │
+│  └───────────┬─────────────┘  └────────────────┬────────────────┘  │
+│              │                                  │                    │
+│       ┌──────▼──────────────────────────────────▼──────┐            │
+│       │            Event Aggregator                     │            │
+│       │          (Trigger Detection)                    │            │
+│       └──────────────────┬──────────────────────────────┘            │
+│                          │                                           │
+│       ┌──────────────────▼──────────────────────────────┐            │
+│       │              Cognitive Loop                      │            │
+│       │            (OODA Implementation)                 │            │
+│       │  ┌────────────────────────────────────────────┐ │            │
+│       │  │ Observe → Orient → Decide → Act            │ │            │
+│       │  └────────────────────────────────────────────┘ │            │
+│       └──────────────────┬──────────────────────────────┘            │
+│                          │                                           │
+│       ┌──────────────────▼──────────────────────────────┐            │
+│       │              SQLite Database                     │            │
+│       │  (Student models, session data, local storage)  │            │
+│       └──────────────────┬──────────────────────────────┘            │
+│                          │                                           │
+│       ┌──────────────────▼──────────────────────────────┐            │
+│       │              OpenRouter Client                   │            │
+│       │  (ONLY external call - Gemini 3 Pro)            │            │
+│       └──────────────────┬──────────────────────────────┘            │
+└──────────────────────────┼──────────────────────────────────────────┘
+                           │ HTTPS (only external traffic)
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    OpenRouter.ai (ONLY CLOUD SERVICE)                │
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │  Gemini 3 Pro (Deep Thinking + Image Analysis)               │    │
+│  │  ✓ Image input/output   ✓ Tool calling   ✓ High reasoning   │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                                                      │
+│  ⚠️ This is the ONLY cloud dependency - all else is local           │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 Asynchronous Event Loop
@@ -364,10 +380,11 @@ def calculate_optimal_delay(student_model, context):
 
 ### 8.1 Latency Targets
 
-- Audio transcription: < 300ms
-- Vision analysis: < 2s (acceptable since periodic)
+- Audio transcription: < 1s (local Faster-Whisper, GPU recommended)
+- Vision analysis: < 3s (OpenRouter call to Gemini 3 Pro)
 - Intervention decision: < 500ms
-- Speech synthesis: < 1s
+- Speech synthesis: < 500ms (Web Speech API, browser-native)
+- SQLite query: < 50ms
 
 ### 8.2 Accuracy Targets
 
@@ -401,29 +418,101 @@ def calculate_optimal_delay(student_model, context):
 - Intervention appropriateness ratings
 - Learning outcome measurements
 
-## 10. Extensibility
+## 10. Deployment Architecture
 
-### 10.1 Subject Domains
+### 10.1 Self-Hosted Server Setup (Local-First)
+
+The system runs on a self-hosted server (Ubuntu or Windows) accessible via building LAN/subnet:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 BUILDING LAN / SUBNET                        │
+│                                                             │
+│  ┌──────────────┐    ┌──────────────────────────────────┐  │
+│  │ Android (PWA) │    │     Self-Hosted Server           │  │
+│  │ Mac Mini      │───▶│  (Ubuntu/Windows + Python)       │  │
+│  │ Windows (PWA) │    │                                  │  │
+│  └──────────────┘    │  ┌─────────────┐ ┌────────────┐  │  │
+│      (Clients)       │  │ Gradio/Flask│ │Faster-Whisper│  │
+│                      │  │  Frontend   │ │ (Local STT)│  │  │
+│                      │  └─────────────┘ └────────────┘  │  │
+│                      │  ┌─────────────┐ ┌────────────┐  │  │
+│                      │  │   SQLite    │ │ Excalidraw │  │  │
+│                      │  │  Database   │ │ (Browser)  │  │  │
+│                      │  └─────────────┘ └────────────┘  │  │
+│                      └──────────────┬───────────────────┘  │
+└─────────────────────────────────────│───────────────────────┘
+                                      │ (ONLY external call)
+                           ┌──────────▼──────────┐
+                           │   OpenRouter.ai     │
+                           │  (Gemini 3 Pro only)│
+                           │                     │
+                           │  ┌───────────────┐  │
+                           │  │ Gemini 3 Pro  │  │
+                           │  │ (Deep Thinking│  │
+                           │  │  + Vision)    │  │
+                           │  └───────────────┘  │
+                           └─────────────────────┘
+```
+
+### 10.2 API Constraints (Local-First)
+
+> ⚠️ **LOCAL-FIRST ARCHITECTURE**: Only OpenRouter.ai is used as an external cloud service.
+
+**OpenRouter Tool Support**: Not all models support function calling. Verify model capabilities before use.
+
+**Preferred Model**: Gemini 3 Pro (via OpenRouter)
+- ✓ High-quality reasoning and understanding
+- ✓ Image input support
+- ✓ Image output support  
+- ✓ Tool/function calling support
+
+**Everything Else is Local**:
+- STT: Faster-Whisper (self-hosted server)
+- TTS: Web Speech API (browser-native)
+- Database: SQLite (local file)
+- Whiteboard: Excalidraw (browser-based)
+- Client: PWA (works offline for UI)
+
+### 10.3 Cost Optimization (Local-First MVP)
+
+| Service | MVP (Local) | Post-MVP (Still Local) |
+|---------|------------------|------------------|
+| STT | Faster-Whisper (self-hosted) | Same (upgrade model size) |
+| TTS | Web Speech API (browser-native) | Same |
+| LLM | Gemini 3 Pro (OpenRouter) | Same |
+| Vision | Gemini 3 Pro (OpenRouter) | Same |
+| Database | SQLite (local) | Same |
+| Whiteboard | Excalidraw (browser) | Same |
+
+## 11. Extensibility
+
+### 11.1 Subject Domains
 
 Initial focus: Mathematics  
 Future: Physics, Chemistry, Programming, Writing
 
-### 10.2 Interface Modalities
+### 11.2 Interface Modalities
 
 Current: Digital whiteboard + voice  
 Future: Physical whiteboard via camera, gesture recognition, multiple students
 
-### 10.3 AI Models
+### 11.3 AI Models
 
 Designed to be model-agnostic with adapter pattern:
-- Vision: GPT-4o, Claude 3 Opus, Moondream
-- STT: Deepgram, Whisper, Faster-Whisper
-- TTS: ElevenLabs, Cartesia, local alternatives
+- Vision/Reasoning: Gemini 3 Pro via OpenRouter (preferred), local OSS models (fallback)
+- STT: Faster-Whisper (local, OSS) - base/small/medium/large models
+- TTS: Web Speech API (browser-native, no cloud dependency)
 
-## 11. Open Questions
+## 12. Open Questions
 
 1. How to handle multiple students in one session?
 2. Optimal buffer sizes for different age groups?
 3. Should the AI ever show its "internal monologue" to students?
 4. How to balance intervention frequency across student diversity?
 5. What metrics best indicate successful tutoring?
+6. Which OpenRouter models support tool calling reliably?
+7. Fallback strategy when OpenRouter is unavailable? (local OSS models?)
+8. How to optimize Faster-Whisper latency on CPU-only servers?
+9. PWA caching strategy for offline UI functionality?
+10. SQLite schema migration strategy for future updates?

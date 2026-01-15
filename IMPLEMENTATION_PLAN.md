@@ -24,9 +24,10 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
   /docs              # Additional documentation
   /src
     /oait
-      /agents        # LiveKit agent implementation
-      /audio         # Audio processing
-      /vision        # Vision processing
+      /server        # Gradio/Flask web server
+      /api           # OpenRouter API integration
+      /audio         # Audio processing (Whisper STT)
+      /vision        # Vision processing (Gemini 3 Pro)
       /cognitive     # OODA loop and decision making
       /models        # Data models and state
       /tools         # AI tool functions
@@ -36,7 +37,7 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
     /integration
     /e2e
   /config            # Configuration files
-  /memory            # Student model storage
+  /memory            # Student model storage (local)
   README.md
   SPECIFICATION.md
   IMPLEMENTATION_PLAN.md
@@ -44,6 +45,18 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
   requirements.txt
   .env.example
 ```
+
+### Architecture Constraints
+
+> ⚠️ **CRITICAL CONSTRAINTS - LOCAL-FIRST**:
+> - **ONLY CLOUD SERVICE**: OpenRouter.ai for Gemini 3 Pro (deep thinking/image analysis)
+> - **ALL OTHER PROCESSING**: Local or on-premises (building subnet)
+> - **STT**: Faster-Whisper running locally on self-hosted server
+> - **TTS**: Web Speech API (browser-native, no cloud)
+> - **Storage**: SQLite database on local server
+> - **Whiteboard**: Excalidraw (runs in browser)
+> - **Client Apps**: PWA for phone/desktop (local-first)
+> - **NO CLOUD SERVICES**: No Deepgram, ElevenLabs, Cartesia, Pipekit, or other cloud APIs
 
 ### Testing
 - [ ] Verify all directories created
@@ -59,11 +72,11 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
 
 ## Phase 1: Basic Audio Pipeline (Week 2)
 
-**Goal**: Implement audio capture, transcription, and buffer management
+**Goal**: Implement audio capture, transcription, and buffer management using local Whisper
 
 ### Deliverables
-- [ ] Audio stream ingestion from LiveKit
-- [ ] Speech-to-text integration (Deepgram or Whisper)
+- [ ] Audio stream ingestion from browser (Web Audio API)
+- [ ] Local Whisper STT integration (faster-whisper)
 - [ ] Transcript buffer with sliding window
 - [ ] Basic silence detection
 - [ ] Audio pipeline unit tests
@@ -71,6 +84,12 @@ This plan breaks down the OAIT implementation into testable phases, with each ph
 ### Core Components
 
 ```python
+# src/oait/audio/whisper_stt.py
+class WhisperSTT:
+    """Local Whisper-based speech-to-text"""
+    def __init__(self, model_size: str = "base")  # base, small, medium, large
+    async def transcribe(audio: AudioChunk) -> str
+    
 # src/oait/audio/stream_handler.py
 class AudioStreamHandler:
     async def capture_audio() -> AudioChunk
@@ -83,14 +102,20 @@ class TranscriptBuffer:
     def clear()
 ```
 
+### MVP Notes
+- Using **local Faster-Whisper** for all STT (no cloud STT services)
+- Web Speech API for browser-based TTS (browser-native, no cloud TTS)
+- All audio processing happens on self-hosted server within building/subnet
+- GPU recommended for faster Whisper inference on larger models
+
 ### Testing
 - [ ] Unit test: Buffer maintains correct window size
 - [ ] Unit test: Silence detection accuracy
 - [ ] Integration test: End-to-end audio capture to transcript
-- [ ] Manual test: Real microphone input transcription
+- [ ] Manual test: Real microphone input transcription via browser
 
 ### Success Criteria
-- Audio consistently transcribed with < 500ms latency
+- Audio consistently transcribed with < 1s latency (local Whisper)
 - Buffer correctly maintains 30-second sliding window
 - Silence detection triggers within 1 second accuracy
 
@@ -98,18 +123,29 @@ class TranscriptBuffer:
 
 ## Phase 2: Basic Vision Pipeline (Week 3)
 
-**Goal**: Implement video capture and basic image analysis
+**Goal**: Implement video capture and basic image analysis via OpenRouter
 
 ### Deliverables
-- [ ] Video stream ingestion from LiveKit
+- [ ] Video stream ingestion from browser (getUserMedia API)
 - [ ] Frame capture at configurable intervals
 - [ ] Basic image preprocessing (crop, denoise)
-- [ ] Vision LLM integration (GPT-4o or Moondream)
+- [ ] Vision LLM integration via **OpenRouter** (Gemini 3 Pro preferred)
 - [ ] Vision pipeline unit tests
 
 ### Core Components
 
 ```python
+# src/oait/api/openrouter.py
+class OpenRouterClient:
+    """Unified client for OpenRouter API calls"""
+    def __init__(self, api_key: str)
+    async def chat(model: str, messages: List[Dict], tools: List[Dict] = None) -> Dict
+    async def vision(model: str, image: Image, prompt: str) -> str
+    
+    # Preferred models (verify tool support before use)
+    VISION_MODEL = "google/gemini-3.0-pro"
+    REASONING_MODEL = "google/gemini-3.0-pro"
+
 # src/oait/vision/stream_handler.py
 class VideoStreamHandler:
     async def capture_frame() -> Image
@@ -117,19 +153,27 @@ class VideoStreamHandler:
     
 # src/oait/vision/analyzer.py
 class VisionAnalyzer:
+    def __init__(self, openrouter: OpenRouterClient)
     async def analyze_whiteboard(image: Image) -> Dict
     async def detect_changes(prev: Image, curr: Image) -> bool
 ```
 
+### OpenRouter Integration Notes
+> ⚠️ **Geo-blocking**: Cannot use OpenAI/Anthropic directly. All calls via OpenRouter.
+> 
+> **Tool calling**: Not all OpenRouter models support tools. Test before implementing.
+> 
+> **Preferred model**: Gemini 3 Pro supports image input, image output, and tools.
+
 ### Testing
 - [ ] Unit test: Frame capture at specified intervals
 - [ ] Unit test: Image preprocessing consistency
-- [ ] Integration test: Vision LLM returns valid analysis
+- [ ] Integration test: OpenRouter vision API returns valid analysis
 - [ ] Manual test: Analyze actual whiteboard images
 
 ### Success Criteria
 - Frames captured reliably every 2-5 seconds
-- Vision LLM correctly describes whiteboard content
+- Gemini 3 Pro (via OpenRouter) correctly describes whiteboard content
 - Change detection identifies significant updates
 
 ---
@@ -300,18 +344,20 @@ class ActionRouter:
 
 ### Deliverables
 - [ ] Complete agent implementation
-- [ ] LiveKit room integration
-- [ ] Basic web frontend (optional)
+- [ ] WebSocket/HTTP API integration
+- [ ] PWA web frontend
 - [ ] End-to-end tests
 - [ ] User acceptance testing plan
 
 ### MVP Features
-✅ Audio capture and transcription  
-✅ Video capture and analysis  
-✅ Student model persistence  
+✅ Audio capture and transcription (local Faster-Whisper)  
+✅ Video capture and analysis (Gemini 3 Pro via OpenRouter)  
+✅ Student model persistence (SQLite)  
 ✅ Internal monologue generation  
 ✅ Basic intervention decisions  
-✅ Text-to-speech output  
+✅ Text-to-speech output (Web Speech API)  
+✅ PWA support for phone/desktop  
+✅ Excalidraw whiteboard integration  
 
 ### Testing
 - [ ] E2E test: Complete tutoring session simulation
@@ -356,16 +402,17 @@ class ActionRouter:
 
 ## Phase 9: Advanced Features (Week 13+)
 
-**Goal**: Implement enhancements beyond MVP
+**Goal**: Implement enhancements beyond MVP (still local-first)
 
 ### Potential Features
 - [ ] Multiple student support
 - [ ] Enhanced pedagogy strategies
-- [ ] Session replay and analysis
+- [ ] Session replay and analysis (from SQLite)
 - [ ] Advanced visualization
-- [ ] Integration with learning management systems
+- [ ] Local OSS vision model integration (fallback)
 - [ ] Support for additional subjects
-- [ ] Local-only mode (privacy-focused)
+- [ ] Multi-server scaling (within building subnet)
+- [ ] Enhanced PWA offline capabilities
 
 ---
 
@@ -397,31 +444,35 @@ Each phase follows this testing pyramid:
 
 ### Technical Risks
 - **Latency**: Multimodal AI can be slow
-  - *Mitigation*: Use streaming APIs, optimize polling intervals
+  - *Mitigation*: Use streaming APIs, optimize polling intervals, GPU for Whisper
   
-- **API Costs**: Cloud services can be expensive
-  - *Mitigation*: Implement rate limiting, support local models
+- **API Costs**: OpenRouter calls have costs
+  - *Mitigation*: Implement rate limiting, cache responses, batch requests
   
 - **Model Accuracy**: AI might misunderstand context
   - *Mitigation*: Extensive testing, confidence thresholds
+
+- **Local Hardware**: Server needs sufficient resources
+  - *Mitigation*: Support multiple Whisper model sizes, GPU optional but recommended
 
 ### Product Risks
 - **Over-intervention**: AI interrupts too much
   - *Mitigation*: Conservative thresholds, user feedback loops
   
 - **Privacy Concerns**: Recording students
-  - *Mitigation*: Clear consent, local-first options, data minimization
+  - *Mitigation*: All data stays local (SQLite), no cloud storage, clear consent
 
 ---
 
 ## Success Metrics
 
 ### Technical Metrics
-- Audio-to-text latency < 500ms
-- Vision analysis latency < 2s
+- Audio-to-text latency < 1s (local Faster-Whisper)
+- Vision analysis latency < 3s (OpenRouter call)
 - Decision latency < 500ms
 - False positive rate < 10%
-- System uptime > 99%
+- System uptime > 99% (local server)
+- SQLite query latency < 50ms
 
 ### User Metrics
 - Intervention helpfulness rating > 4/5
@@ -440,10 +491,26 @@ Each phase follows this testing pyramid:
 ## Dependencies and Prerequisites
 
 ### Required Accounts/Keys
-- LiveKit account (cloud or self-hosted)
-- OpenAI API key (or local Ollama setup)
-- Deepgram API key (or local Whisper setup)
-- ElevenLabs API key (or local TTS setup)
+- **OpenRouter.ai API key** (REQUIRED - only cloud dependency for Gemini 3 Pro)
+
+### MVP Stack (Local-First, Minimal Cloud)
+- **Faster-Whisper** (local): STT on self-hosted server
+- **Web Speech API**: Browser-native TTS (no cloud)
+- **Gemini 3 Pro** via OpenRouter: Vision + deep reasoning (only cloud call)
+- **SQLite**: Local database for student models and sessions
+- **Excalidraw**: Browser-based whiteboard (OSS)
+
+### Post-MVP Enhancements (Still Local)
+- Additional self-hosted servers for scaling
+- Local OSS vision models for fallback
+- Enhanced PWA offline capabilities
+
+### Hardware Requirements
+- **Self-Hosted Server**: Ubuntu or Windows machine on building LAN/subnet
+  - Python 3.9+
+  - Sufficient RAM for Whisper model (4GB+ recommended, 8GB+ for medium/large)
+  - GPU recommended for faster Whisper inference (CUDA or similar)
+- **Client Devices**: Android phone (PWA), Mac Mini, Windows laptop with browser
 
 ### Development Tools
 - Python 3.9+
@@ -451,10 +518,25 @@ Each phase follows this testing pyramid:
 - Docker (optional, for containerization)
 - VS Code or similar IDE
 
+### Python Dependencies
+```
+openai  # OpenRouter uses OpenAI-compatible API
+faster-whisper  # Local STT (OSS)
+gradio  # Web frontend
+flask  # Alternative web frontend
+pillow  # Image processing
+pydantic  # Data models
+python-dotenv  # Configuration
+pytest  # Testing
+pytest-asyncio  # Async testing
+aiosqlite  # Async SQLite support
+sqlalchemy  # Database ORM (optional)
+```
+
 ### Knowledge Requirements
 - Async Python programming
 - Real-time audio/video processing
-- LLM integration
+- LLM integration (OpenRouter API)
 - Basic pedagogy principles
 
 ---
