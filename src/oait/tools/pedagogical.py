@@ -38,8 +38,6 @@ class PedagogicalTools:
         """
         if isinstance(node, ast.Constant):  # Python 3.8+
             return float(node.value)
-        elif isinstance(node, ast.Num):  # Python 3.7 compatibility
-            return float(node.n)
         elif isinstance(node, ast.BinOp):
             left = PedagogicalTools._safe_eval(node.left)
             right = PedagogicalTools._safe_eval(node.right)

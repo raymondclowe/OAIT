@@ -1,0 +1,43 @@
+<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#grad)"/>
+  
+  <!-- Brain/AI icon -->
+  <g fill="#ffffff" stroke="#ffffff" stroke-width="6">
+    <!-- Head outline -->
+    <circle cx="256" cy="240" r="120" fill="none" stroke-width="8"/>
+    
+    <!-- Neural connections -->
+    <line x1="190" y1="200" x2="240" y2="240" opacity="0.8"/>
+    <line x1="322" y1="200" x2="272" y2="240" opacity="0.8"/>
+    <line x1="210" y1="280" x2="256" y2="250" opacity="0.8"/>
+    <line x1="302" y1="280" x2="256" y2="250" opacity="0.8"/>
+    <line x1="220" y1="230" x2="256" y2="240" opacity="0.6"/>
+    <line x1="292" y1="230" x2="256" y2="240" opacity="0.6"/>
+    
+    <!-- Neural nodes -->
+    <circle cx="190" cy="200" r="10" fill="#ffffff"/>
+    <circle cx="322" cy="200" r="10" fill="#ffffff"/>
+    <circle cx="210" cy="280" r="10" fill="#ffffff"/>
+    <circle cx="302" cy="280" r="10" fill="#ffffff"/>
+    <circle cx="220" cy="230" r="8" fill="#ffffff"/>
+    <circle cx="292" cy="230" r="8" fill="#ffffff"/>
+    <circle cx="256" cy="240" r="12" fill="#ffffff"/>
+    
+    <!-- Book/learning icon at bottom -->
+    <path d="M 200 350 L 200 380 L 256 370 L 312 380 L 312 350 L 256 340 Z" fill="#ffffff" opacity="0.9"/>
+    <line x1="256" y1="340" x2="256" y2="370" stroke-width="6"/>
+    <path d="M 220 340 L 220 360" stroke-width="3" opacity="0.7"/>
+    <path d="M 292 340 L 292 360" stroke-width="3" opacity="0.7"/>
+  </g>
+  
+  <!-- Text OAIT -->
+  <text x="256" y="440" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#ffffff" text-anchor="middle" opacity="0.9">OAIT</text>
+</svg>
