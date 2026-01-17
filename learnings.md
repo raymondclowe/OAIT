@@ -190,6 +190,20 @@ Created comprehensive integration tests (`tests/integration/test_component_integ
 - Complete workflows validated (transcript → analysis → strategy)
 - Tool definitions validated for OpenRouter compatibility
 
+### PWA Support Added
+Created Progressive Web App support for mobile and desktop installation:
+- **manifest.json**: App metadata, icons, display mode
+- **sw.js**: Service worker for offline caching
+- **Icons**: 192x192 and 512x512 SVG-based app icons
+- **Documentation**: Complete PWA guide in docs/PWA.md
+
+**PWA Features:**
+- Install on Android, iOS, Windows, Mac, Linux
+- Offline UI access (cached static assets)
+- Standalone app experience (no browser chrome)
+- Network-first caching strategy
+- Automatic cache updates
+
 ## 2026-01-15: Semaphore Leak Fix
 
 ### Issue
