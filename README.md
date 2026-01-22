@@ -89,6 +89,19 @@ See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed roadmap and [S
 git clone https://github.com/raymondclowe/OAIT.git
 cd OAIT
 
+# Run automated setup (recommended)
+bash setup.sh
+
+# This will:
+# - Install uv package manager
+# - Create virtual environment
+# - Install all dependencies
+# - Set up .env configuration
+# - Run tests to verify installation
+```
+
+**Manual Installation:**
+```bash
 # Install dependencies
 pip install -r requirements.txt
 
@@ -135,38 +148,71 @@ The server will start on `http://localhost:7860`. Open this URL in your browser.
 
 ### Current Features
 
-✅ Real-time audio transcription (Faster-Whisper local STT)  
-✅ Canvas whiteboard with drawing  
-✅ WebSocket communication  
-✅ Session management  
-✅ Web Speech API text-to-speech  
-✅ Student model persistence (SQLite)  
-✅ AI pedagogical tools (6 tools)  
-✅ Responsive web UI  
+✅ **Core Infrastructure:**
+- Real-time audio transcription (Faster-Whisper local STT)
+- Canvas whiteboard with drawing
+- WebSocket communication (FastAPI)
+- Session management with SQLite persistence
+- Web Speech API text-to-speech (browser-native)
+
+✅ **AI Capabilities:**
+- 6 pedagogical tools (calculation verification, confusion detection, etc.)
+- Trigger detection system (silence, questions, stuck patterns)
+- Student model persistence across sessions
+- OODA loop architecture (Observe-Orient-Decide-Act)
+
+✅ **Progressive Web App (PWA):**
+- Install on Android, iOS, desktop
+- Offline UI access (cached static assets)
+- Standalone app experience
+- Service worker for caching
+
+✅ **Testing:**
+- 46/46 tests passing (37 unit, 9 integration)
+- Zero warnings
+- Full test coverage for pedagogical tools
+
+⏳ **In Progress:**
+- Complete OODA loop integration with OpenRouter
+- End-to-end testing with real sessions  
 
 ## Documentation
 
+### Main Documentation
 - [SPECIFICATION.md](SPECIFICATION.md) - Detailed technical specification
 - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Phased development plan
 - [STATUS.md](STATUS.md) - Current implementation status
 - [TODO.md](TODO.md) - Fine-grained task checklist
 - [learnings.md](learnings.md) - Development learnings and decisions
+
+### Specialized Guides
+- [docs/TESTING.md](docs/TESTING.md) - Complete testing guide (unit, integration, e2e)
+- [docs/PWA.md](docs/PWA.md) - Progressive Web App installation and features
 - [src/oait/server/README.md](src/oait/server/README.md) - WebSocket server documentation
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (46 tests)
 pytest -v
 
 # Run with coverage
 pytest --cov=src/oait --cov-report=html
 
+# Run specific test categories
+pytest tests/unit/ -v           # Unit tests (37 tests)
+pytest tests/integration/ -v    # Integration tests (9 tests)
+
 # Run specific test file
 pytest tests/unit/test_pedagogical_tools.py -v
 ```
 
-**Test Status**: 37/37 tests passing ✅
+**Test Status**: 46/46 tests passing ✅
+- 37 unit tests
+- 9 integration tests
+- Zero warnings
+
+See [docs/TESTING.md](docs/TESTING.md) for comprehensive testing guide including end-to-end manual tests.
 
 ## Architecture Overview
 
