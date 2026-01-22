@@ -7,6 +7,8 @@ Use Replicate's Chatterbox TTS model for AI voice responses to students.
 ## API Details
 
 **Model**: `resemble-ai/chatterbox-turbo`  
+Supported paralinguistic tags you can include in your text:
+[clear throat], [sigh], [sush], [cough], [groan], [sniff], [gasp], [chuckle], [laugh]
 **Provider**: Replicate  
 **Token**: `REPLICATE_API_TOKEN` (stored in `.env`)
 
@@ -216,3 +218,22 @@ replicate = "^0.25.0"
 # .env
 REPLICATE_API_TOKEN=r8_xxxxxxxxxxxx
 ```
+
+
+
+# What type of voice:
+
+Limited direct studies exist on specific voice types like parent, teacher, or celebrity for educational chatbots, but research on related aspects like voice modality, anthropomorphism, and embodiment provides insights into engagement, trust, and learning.
+​
+
+Key Findings
+Voice-based interactions outperform text-based ones in boosting emotional and cognitive engagement with educational robots. Physical embodiment of AI tutors, often paired with humanistic voices, increases initial on-task enjoyment but shows mixed effects on sustained performance and may fade due to novelty. Anthropomorphic traits like high sociability correlate negatively with task performance, while disturbance reduces enjoyment; balanced humanoid designs foster trust without uncanny valley issues.
+​
+
+Voice vs. Other Personas
+No studies directly compare parent, teacher, famous person, or admired figure voices to robotic or humanistic ones in chatbots. However, humanistic and anthropomorphic voices (e.g., natural speech in robots) enhance perceived agency and reduce anxiety compared to purely robotic tones, improving willingness to communicate and self-perceived competence in language learning. Voice-enabled AI generally heightens motivation over text, suggesting humanistic over robotic for better student interaction.
+​
+
+Implications for Design
+Educational chatbots benefit from voice over text for engagement, with physically embodied humanistic voices aiding initial trust and enjoyment. Avoid overly sociable personas that might distract from tasks; prioritize low-disturbance, natural voices to support learning without hindering performance. Future research should test specific personas like teacher-like voices against baselines for targeted outcomes in student trust and retention.
+​
